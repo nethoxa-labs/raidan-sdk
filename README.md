@@ -4,7 +4,7 @@ Neutral Go primitives for portable Ethereum protocol test cases.
 
 | Folder | Contents |
 | --- | --- |
-| root | Test cases, targets, execution, and RLP encoding |
+| root | Test function types, targets, execution, and RLP encoding |
 | `discovery` | ENR, enode, DNS discovery, discv4, and discv5 |
 | `eth` | ETH protocol messages, negotiation, and request matching |
 | `gossipsub` | Consensus gossip topics and publishing |
