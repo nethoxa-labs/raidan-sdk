@@ -1,0 +1,87 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: sdk-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Verify public module
+        run: |
+          LC_ALL=C sort -c .public-files
+          test "$(wc -l < .public-files)" -eq "$(LC_ALL=C sort -u .public-files | wc -l)"
+          diff -u .public-files <(git ls-files | LC_ALL=C sort)
+          test -z "$(find . -path './.git' -prune -o -type l -print)"
+          test -f doc.go -a -f sdk.go
+          test ! -d sdk -a ! -d fixtures -a ! -d consensus
+          test "$(go list -m)" = "github.com/nethoxa-labs/raidan-sdk"
+          test "$(sed -n 's/^const Version = "\([^"]*\)"$/\1/p' sdk.go)" = "$GITHUB_REF_NAME"
+          for package in discovery eth gossipsub reqresp result rlpx rpc session snap target utils wit; do
+            test -f "$package/doc.go"
+          done
+          for proxy in common crypto ecies enode ethwire forkid gethrlpx p2p rlp snappy types; do
+            test ! -d "$proxy"
+          done
+          for package in discoveryprobe ethprobe gossipsubprobe snapprobe witprobe; do
+            test ! -d "$package"
+          done
+          for private in catalog stress fuzz chaos maximal; do
+            test ! -e "$private"
+          done
+          test -z "$(find . -path './.git' -prune -o \( -iname '*catalog*' -o -iname '*stress*' -o -iname '*fuzz*' -o -iname '*chaos*' -o -iname '*maximal*' \) -print)"
+          test ! -f reqresp/probe.go -a ! -f rlpx/probe.go -a ! -f utils/hashes.go
+          ! grep -R -n -E 'BuildENRWithRandomKey|RawDeclaredLen|RequestInvalid|WriteRlpxZeroSizeFrame|p2p-collide' --include='*.go' .
+          ! grep -R -n -i -E 'probe|malformed|malicious|attack|exploit|vulnerab' --include='*.go' .
+          ! grep -R -n -i -E 'catalog|stress|fuzz|chaos|maximal' --include='*.go' .
+          ! go list -deps ./... | grep -E 'github.com/nethoxa-labs/raidan-(app|worker|website|infra|specs)'
+          test -z "$(gofmt -l .)"
+          go mod tidy -diff
+          CGO_ENABLED=0 go vet ./...
+          CGO_ENABLED=0 go build ./...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+  release:
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Validate module release tag
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          test "$(go list -m)" = "github.com/nethoxa-labs/raidan-sdk"
+          test "$(sed -n 's/^const Version = "\([^"]*\)"$/\1/p' sdk.go)" = "$GITHUB_REF_NAME"
+      - name: Publish module release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release $GITHUB_REF_NAME already exists; refusing to republish an immutable version" >&2
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
