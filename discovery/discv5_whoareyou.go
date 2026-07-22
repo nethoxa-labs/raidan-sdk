@@ -37,7 +37,7 @@ func (s *Discv5Conn) readWhoAreYou(timeout time.Duration, expectedNonce *[12]byt
 		if err != nil {
 			return nil, err
 		}
-		if !udpAddrEqual(from, s.peerAddr) {
+		if !SameUDPAddr(from, s.peerAddr) {
 			continue
 		}
 		challenge, err := s.decodeWhoAreYou(buf[:n])
