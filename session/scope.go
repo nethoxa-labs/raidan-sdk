@@ -14,6 +14,8 @@ type Scope struct {
 	// Verbose enables per-step narration (Step). It is set for single-shot test
 	// cases and left off for high-volume replay loops that would flood.
 	Verbose bool
+	// Quiet explicitly suppresses inherited verbose narration for child scopes.
+	Quiet bool
 }
 
 type scopeKey struct{}
@@ -35,7 +37,9 @@ func With(ctx context.Context, scope Scope) context.Context {
 	if scope.Observer == nil {
 		scope.Observer = parent.Observer
 	}
-	if !scope.Verbose {
+	if scope.Quiet {
+		scope.Verbose = false
+	} else if !scope.Verbose {
 		scope.Verbose = parent.Verbose
 	}
 	return context.WithValue(ctx, scopeKey{}, scope)
