@@ -50,9 +50,32 @@ func listenUDPToPeer(peer *net.UDPAddr) (*net.UDPConn, error) {
 	return fd, nil
 }
 
-func udpAddrEqual(left, right *net.UDPAddr) bool {
+// SameUDPAddr reports whether two UDP addresses share IP, port, and zone.
+func SameUDPAddr(left, right *net.UDPAddr) bool {
 	return left != nil && right != nil &&
 		left.Port == right.Port && left.Zone == right.Zone && left.IP.Equal(right.IP)
+}
+
+// ExpectAnyDiscv4Reply waits up to timeout for any discv4 datagram from the
+// connection's peer, ignoring datagrams from other sources.
+func ExpectAnyDiscv4Reply(conn *Discv4Conn, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		remaining := time.Until(deadline)
+		if remaining < 100*time.Millisecond {
+			remaining = 100 * time.Millisecond
+		}
+		_, _, from, err := conn.ReadDiscv4(remaining)
+		if err == nil && SameUDPAddr(from, conn.PeerAddr()) {
+			return true
+		}
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			continue
+		}
+		return false
+	}
+	return false
 }
 
 // DialDiscv4 opens a UDP socket and resolves the peer's UDP endpoint

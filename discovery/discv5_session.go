@@ -123,7 +123,7 @@ func (s *Discv5Conn) ReadOrdinary(sess *Discv5Session, timeout time.Duration) (*
 		if err != nil {
 			return nil, err
 		}
-		if !udpAddrEqual(from, s.peerAddr) {
+		if !SameUDPAddr(from, s.peerAddr) {
 			continue
 		}
 		packet, err := s.decodeOrdinary(sess, buf[:n])
