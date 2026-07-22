@@ -104,6 +104,7 @@ func DialDiscv4(ctx context.Context, target string) (*Discv4Conn, error) {
 		return nil, err
 	}
 	u := &Discv4Conn{ctx: ctx, fd: fd, key: key, peer: peer}
+	session.Step(ctx, "[+] Opening discv4 socket to %s", peer)
 	return u, nil
 }
 
