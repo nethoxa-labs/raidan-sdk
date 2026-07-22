@@ -59,6 +59,7 @@ func DialRLPx(ctx context.Context, target string) (*Conn, net.Conn, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate key: %w", err)
 	}
+	session.Step(ctx, "[+] Dialing RLPx peer %s", target)
 	return DialWithKey(ctx, target, key)
 }
 
