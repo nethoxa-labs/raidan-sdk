@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,15 @@ import (
 	ethrpc "github.com/nethoxa-labs/raidan-sdk/rpc"
 	"github.com/nethoxa-labs/raidan-sdk/session"
 )
+
+// capabilityList renders offered capabilities as "eth/68, snap/1" for logs.
+func capabilityList(caps []p2p.Cap) string {
+	parts := make([]string, len(caps))
+	for i, capability := range caps {
+		parts[i] = capability.String()
+	}
+	return strings.Join(parts, ", ")
+}
 
 type connMsg struct {
 	code uint64
@@ -267,12 +277,15 @@ func Dial(ctx context.Context, target, rpc string, config Config) (*Conn, error)
 	dialParams := cp
 
 	caps := config.capabilities()
+	session.Step(ctx, "[+] Dialing eth peer at %s:%d", node.IP(), node.TCP())
 	key, err := crypto.GenerateKey()
 	if err != nil {
 		return nil, fmt.Errorf("create identity: %w", err)
 	}
 	conn, peerFID, dialErr := rawDial(ctx, node, &dialParams, key, caps)
 	if dialErr == nil {
+		session.Step(ctx, "[+] RLPx handshake complete")
+		session.Step(ctx, "[*] Negotiated capabilities: %s", capabilityList(caps))
 		go conn.reader()
 		return conn, nil
 	}
@@ -291,6 +304,8 @@ func Dial(ctx context.Context, target, rpc string, config Config) (*Conn, error)
 	if dialErr != nil {
 		return nil, dialErr
 	}
+	session.Step(ctx, "[+] RLPx handshake complete (fork-id retry)")
+	session.Step(ctx, "[*] Negotiated capabilities: %s", capabilityList(caps))
 	go conn.reader()
 	return conn, nil
 }

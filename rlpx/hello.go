@@ -8,6 +8,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rlp"
+
+	"github.com/nethoxa-labs/raidan-sdk/session"
 )
 
 // RawHello is the base-protocol Hello payload.
@@ -28,6 +30,7 @@ func DialAndHello(ctx context.Context, target string, key *ecdsa.PrivateKey, hel
 	if err != nil {
 		return nil, nil, err
 	}
+	session.Step(ctx, "[+] RLPx handshake complete")
 	data, err := rlp.EncodeToBytes(&hello)
 	if err != nil {
 		_ = fd.Close()
@@ -37,6 +40,7 @@ func DialAndHello(ctx context.Context, target string, key *ecdsa.PrivateKey, hel
 		_ = fd.Close()
 		return nil, nil, fmt.Errorf("write hello: %w", err)
 	}
+	session.Step(ctx, "[+] Sent Hello with %d capabilities", len(hello.Caps))
 	if err := clearDeadline(fd); err != nil {
 		_ = fd.Close()
 		return nil, nil, err

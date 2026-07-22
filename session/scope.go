@@ -11,6 +11,9 @@ type Scope struct {
 	Output   io.Writer
 	Client   string
 	Observer Observer
+	// Verbose enables per-step narration (Step). It is set for single-shot test
+	// cases and left off for high-volume replay loops that would flood.
+	Verbose bool
 }
 
 type scopeKey struct{}
@@ -31,6 +34,9 @@ func With(ctx context.Context, scope Scope) context.Context {
 	}
 	if scope.Observer == nil {
 		scope.Observer = parent.Observer
+	}
+	if !scope.Verbose {
+		scope.Verbose = parent.Verbose
 	}
 	return context.WithValue(ctx, scopeKey{}, scope)
 }

@@ -11,6 +11,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+
+	"github.com/nethoxa-labs/raidan-sdk/session"
 )
 
 // Discv5Conn holds the live UDP connection plus the static crypto state.
@@ -50,6 +52,7 @@ func DialDiscv5(ctx context.Context, target string) (*Discv5Conn, error) {
 		_ = fd.Close()
 		return nil, fmt.Errorf("generate key: %w", err)
 	}
+	session.Step(ctx, "[+] Opening discv5 session to %s", peer)
 	return &Discv5Conn{
 		ctx:        ctx,
 		fd:         fd,
