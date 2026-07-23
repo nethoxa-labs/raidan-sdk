@@ -3,11 +3,13 @@ package wit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p"
 
 	ethsdk "github.com/nethoxa-labs/raidan-sdk/eth"
+	sdkrlpx "github.com/nethoxa-labs/raidan-sdk/rlpx"
 	"github.com/nethoxa-labs/raidan-sdk/session"
 )
 
@@ -67,6 +69,43 @@ func (c *Conn) SendRaw(code uint64, payload []byte) error {
 	session.ObserveWrite(c.ctx, session.Write{Protocol: "wit", Code: code, Payload: payload})
 	_, err := c.preStatus.RLPx().Write(c.offset+code, payload)
 	return err
+}
+
+// ReadRaw reads the next WIT/1 message and returns its protocol-relative code.
+// Devp2p keepalive messages are handled internally and unrelated negotiated
+// protocol messages are skipped until the deadline expires.
+func (c *Conn) ReadRaw(timeout time.Duration) (uint64, []byte, error) {
+	if c == nil || c.preStatus == nil {
+		return 0, nil, errors.New("nil WIT connection")
+	}
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	rlpxConn := c.preStatus.RLPx()
+	if err := rlpxConn.SetReadDeadline(time.Now().Add(session.Timeout(c.ctx, timeout))); err != nil {
+		return 0, nil, fmt.Errorf("set WIT read deadline: %w", err)
+	}
+	defer func() { _ = rlpxConn.SetReadDeadline(time.Time{}) }()
+	for {
+		code, payload, _, err := rlpxConn.Read()
+		if err != nil {
+			return 0, nil, err
+		}
+		switch code {
+		case sdkrlpx.DiscMsg:
+			_, reason := sdkrlpx.DecodeDisconnectReason(payload)
+			return 0, nil, errors.New("peer disconnected: " + reason)
+		case sdkrlpx.PingMsg:
+			if _, err := rlpxConn.Write(sdkrlpx.PongMsg, nil); err != nil {
+				return 0, nil, fmt.Errorf("write WIT session pong: %w", err)
+			}
+			continue
+		}
+		if code < c.offset || code >= c.offset+4 {
+			continue
+		}
+		return code - c.offset, append([]byte(nil), payload...), nil
+	}
 }
 
 // WaitDisconnect waits for the peer to close or send a devp2p Disconnect.
