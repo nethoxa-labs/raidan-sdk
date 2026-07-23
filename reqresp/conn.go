@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -22,17 +21,9 @@ import (
 )
 
 const (
-	consensusDialTimeout       = 10 * time.Second
-	consensusDialSpacing       = 350 * time.Millisecond
-	consensusDialGateRetention = time.Minute
-	consensusDialGateMaxKeys   = 1024
-	consensusRequestAttempts   = 3
+	consensusDialTimeout     = 10 * time.Second
+	consensusRequestAttempts = 3
 )
-
-var consensusDialGate = struct {
-	sync.Mutex
-	next map[string]time.Time
-}{next: make(map[string]time.Time)}
 
 // Session is one connected consensus request/response peer.
 type Session struct {
@@ -56,9 +47,6 @@ func NewSession(ctx context.Context, beaconURL, p2pAddr string) (*Session, error
 	}
 	addr, err := Multiaddr(p2pAddr, peerID)
 	if err != nil {
-		return nil, err
-	}
-	if err := waitConsensusDialTurn(dialCtx, p2pAddr); err != nil {
 		return nil, err
 	}
 	info, err := peer.AddrInfoFromP2pAddr(addr)
@@ -108,50 +96,6 @@ func (s *Session) pinExplicitAddrs() {
 	}
 	s.host.Peerstore().ClearAddrs(s.peerID)
 	s.host.Peerstore().AddAddrs(s.peerID, s.addrs, peerstore.TempAddrTTL)
-}
-
-func waitConsensusDialTurn(ctx context.Context, key string) error {
-	wait := reserveConsensusDialTurn(key, time.Now())
-	if wait == 0 {
-		return nil
-	}
-	timer := time.NewTimer(wait)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
-func reserveConsensusDialTurn(key string, now time.Time) time.Duration {
-	consensusDialGate.Lock()
-	defer consensusDialGate.Unlock()
-
-	for candidate, next := range consensusDialGate.next {
-		if !next.Add(consensusDialGateRetention).After(now) {
-			delete(consensusDialGate.next, candidate)
-		}
-	}
-	if _, exists := consensusDialGate.next[key]; !exists && len(consensusDialGate.next) >= consensusDialGateMaxKeys {
-		var oldestKey string
-		var oldest time.Time
-		for candidate, next := range consensusDialGate.next {
-			if oldestKey == "" || next.Before(oldest) {
-				oldestKey, oldest = candidate, next
-			}
-		}
-		delete(consensusDialGate.next, oldestKey)
-	}
-
-	var wait time.Duration
-	if next := consensusDialGate.next[key]; next.After(now) {
-		wait = next.Sub(now)
-		now = next
-	}
-	consensusDialGate.next[key] = now.Add(consensusDialSpacing)
-	return wait
 }
 
 func retryableConsensusConnectError(err error) bool {
