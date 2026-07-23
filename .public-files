@@ -2,6 +2,8 @@
 .gitignore
 .golangci.yml
 .public-files
+AGENTS.md
+CLAUDE.md
 LICENSE
 README.md
 discovery/discv4_conn.go
