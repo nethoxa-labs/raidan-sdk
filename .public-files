@@ -67,6 +67,7 @@ go.mod
 go.sum
 gossipsub/doc.go
 gossipsub/publish.go
+gossipsub/rpc.go
 gossipsub/topic.go
 reqresp/blobsidecarsbyrange.go
 reqresp/blobsidecarsbyroot.go

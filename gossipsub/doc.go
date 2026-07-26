@@ -3,7 +3,8 @@
 // ForkDigestHex reads the active fork digest from a beacon API, and Topic builds
 // a canonical topic path. Publish establishes a libp2p gossipsub session, waits
 // for a subscribed peer when requested, and publishes one caller-encoded
-// message. Callers use github.com/golang/snappy directly for consensus gossip
+// message. SendRPC writes one caller-encoded protobuf RPC on an existing libp2p
+// host. Callers use github.com/golang/snappy directly for consensus gossip
 // payload encoding.
 //
 //	digest, err := gossipsub.ForkDigestHex(ctx, target.ConsensusURL)
