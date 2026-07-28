@@ -2,6 +2,7 @@ package wit
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"time"
@@ -11,6 +12,7 @@ import (
 	ethsdk "github.com/nethoxa-labs/raidan-sdk/eth"
 	sdkrlpx "github.com/nethoxa-labs/raidan-sdk/rlpx"
 	"github.com/nethoxa-labs/raidan-sdk/session"
+	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 // ErrUnsupported reports that the peer did not negotiate WIT/1.
@@ -26,6 +28,19 @@ type Conn struct {
 // Dial negotiates ETH/68 or ETH/69 and WIT/1, then completes the ETH Status
 // exchange. The returned connection is ready for WIT messages.
 func Dial(ctx context.Context, target, rpc string) (*Conn, error) {
+	key, err := utils.RaidanParticipantKey()
+	if err != nil {
+		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+	}
+	return DialWithKey(ctx, target, rpc, key)
+}
+
+// DialWithKey negotiates WIT/1 with an explicit local identity.
+// Multi-identity probes must opt in through this path.
+func DialWithKey(ctx context.Context, target, rpc string, key *ecdsa.PrivateKey) (*Conn, error) {
+	if key == nil {
+		return nil, errors.New("WIT local identity is nil")
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -34,7 +49,7 @@ func Dial(ctx context.Context, target, rpc string) (*Conn, error) {
 		{Name: "eth", Version: 68},
 		{Name: "wit", Version: 1},
 	}
-	preStatus, err := ethsdk.DialPreStatus(ctx, target, rpc, ethsdk.Config{Capabilities: caps})
+	preStatus, err := ethsdk.DialPreStatusWithKey(ctx, target, rpc, ethsdk.Config{Capabilities: caps}, key)
 	if err != nil {
 		return nil, err
 	}

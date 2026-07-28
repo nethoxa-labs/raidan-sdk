@@ -20,6 +20,7 @@ import (
 	sdkrlpx "github.com/nethoxa-labs/raidan-sdk/rlpx"
 	ethrpc "github.com/nethoxa-labs/raidan-sdk/rpc"
 	"github.com/nethoxa-labs/raidan-sdk/session"
+	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 // capabilityList renders offered capabilities as "eth/68, snap/1" for logs.
@@ -86,6 +87,20 @@ type PreStatusConn struct {
 // ETH Status. Capabilities defaults to eth/69 and eth/68; supplying
 // Config.Capabilities uses that exact ordered list.
 func DialPreStatus(ctx context.Context, target, rpcURL string, config Config) (*PreStatusConn, error) {
+	key, err := utils.RaidanParticipantKey()
+	if err != nil {
+		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+	}
+	return DialPreStatusWithKey(ctx, target, rpcURL, config, key)
+}
+
+// DialPreStatusWithKey performs TCP, RLPx, and Hello negotiation with an
+// explicit local identity. Multi-identity probes must opt in through this
+// path.
+func DialPreStatusWithKey(ctx context.Context, target, rpcURL string, config Config, key *ecdsa.PrivateKey) (*PreStatusConn, error) {
+	if key == nil {
+		return nil, errors.New("ETH local identity is nil")
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -106,10 +121,6 @@ func DialPreStatus(ctx context.Context, target, rpcURL string, config Config) (*
 		params = chainParams
 	}
 
-	key, err := crypto.GenerateKey()
-	if err != nil {
-		return nil, fmt.Errorf("create identity: %w", err)
-	}
 	rlpxConn, fd, err := sdkrlpx.DialWithKey(ctx, target, key)
 	if err != nil {
 		return nil, fmt.Errorf("rlpx handshake: %w", err)
@@ -257,6 +268,19 @@ func (c *PreStatusConn) Close() { _ = c.fd.Close() }
 // Dial performs RLPx, Hello, and Status and returns a ready ETH connection.
 // MaxVersion defaults to 70, matching the broadly deployed protocol baseline.
 func Dial(ctx context.Context, target, rpc string, config Config) (*Conn, error) {
+	key, err := utils.RaidanParticipantKey()
+	if err != nil {
+		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+	}
+	return DialWithKey(ctx, target, rpc, config, key)
+}
+
+// DialWithKey performs RLPx, Hello, and Status with an explicit local
+// identity. Multi-identity probes must opt in through this path.
+func DialWithKey(ctx context.Context, target, rpc string, config Config, key *ecdsa.PrivateKey) (*Conn, error) {
+	if key == nil {
+		return nil, errors.New("ETH local identity is nil")
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -278,10 +302,6 @@ func Dial(ctx context.Context, target, rpc string, config Config) (*Conn, error)
 
 	caps := config.capabilities()
 	session.Step(ctx, "[+] Dialing eth peer at %s:%d", node.IP(), node.TCP())
-	key, err := crypto.GenerateKey()
-	if err != nil {
-		return nil, fmt.Errorf("create identity: %w", err)
-	}
 	conn, peerFID, dialErr := rawDial(ctx, node, &dialParams, key, caps)
 	if dialErr == nil {
 		session.Step(ctx, "[+] RLPx handshake complete")
@@ -296,10 +316,6 @@ func Dial(ctx context.Context, target, rpc string, config Config) (*Conn, error)
 		return nil, dialErr
 	}
 	dialParams.ForkID = peerFID
-	key, err = crypto.GenerateKey()
-	if err != nil {
-		return nil, fmt.Errorf("create retry identity: %w", err)
-	}
 	conn, _, dialErr = rawDial(ctx, node, &dialParams, key, caps)
 	if dialErr != nil {
 		return nil, dialErr

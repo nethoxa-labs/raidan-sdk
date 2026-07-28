@@ -8,14 +8,14 @@ import (
 	"net"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/nethoxa-labs/raidan-sdk/session"
+	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
-// Discv4Conn owns a UDP socket and a generated local key. It handles the
+// Discv4Conn owns a UDP socket and a local key. It handles the
 // signature and hash prefix required by discv4 packets.
 type Discv4Conn struct {
 	ctx  context.Context
@@ -78,12 +78,20 @@ func ExpectAnyDiscv4Reply(conn *Discv4Conn, timeout time.Duration) bool {
 	return false
 }
 
-// DialDiscv4 opens a UDP socket and resolves the peer's UDP endpoint
-// from its enode URL.
+// DialDiscv4 opens a UDP socket using Raidan's fixed public test identity.
 func DialDiscv4(ctx context.Context, target string) (*Discv4Conn, error) {
-	key, err := crypto.GenerateKey()
+	key, err := utils.RaidanParticipantKey()
 	if err != nil {
-		return nil, fmt.Errorf("generate key: %w", err)
+		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+	}
+	return DialDiscv4WithKey(ctx, target, key)
+}
+
+// DialDiscv4WithKey opens a UDP socket with the supplied local discovery
+// identity. Multi-identity probes must opt in explicitly through this path.
+func DialDiscv4WithKey(ctx context.Context, target string, key *ecdsa.PrivateKey) (*Discv4Conn, error) {
+	if key == nil {
+		return nil, errors.New("discv4 local key is nil")
 	}
 	if ctx == nil {
 		ctx = context.Background()

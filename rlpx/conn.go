@@ -25,6 +25,7 @@ import (
 	"github.com/golang/snappy"
 
 	"github.com/nethoxa-labs/raidan-sdk/session"
+	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 const maxFrameSize = 0xffffff
@@ -52,12 +53,12 @@ type frameMAC struct {
 	seed   [32]byte
 }
 
-// DialRLPx opens a bare RLPx connection without sending Hello. It generates a
-// fresh initiator key and returns both the framed and underlying connections.
+// DialRLPx opens a bare RLPx connection without sending Hello using Raidan's
+// fixed public test identity.
 func DialRLPx(ctx context.Context, target string) (*Conn, net.Conn, error) {
-	key, err := crypto.GenerateKey()
+	key, err := utils.RaidanParticipantKey()
 	if err != nil {
-		return nil, nil, fmt.Errorf("generate key: %w", err)
+		return nil, nil, fmt.Errorf("load Raidan participant key: %w", err)
 	}
 	session.Step(ctx, "[+] Dialing RLPx peer %s", target)
 	return DialWithKey(ctx, target, key)

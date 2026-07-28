@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	libp2p "github.com/libp2p/go-libp2p"
 	mplex "github.com/libp2p/go-libp2p-mplex"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
@@ -18,6 +19,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/nethoxa-labs/raidan-sdk/session"
+	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 const (
@@ -33,8 +35,23 @@ type Session struct {
 	addrs  []ma.Multiaddr
 }
 
-// NewSession connects a transient libp2p host to a consensus peer.
+// NewSession connects a transient libp2p host using Raidan's fixed public test
+// identity.
 func NewSession(ctx context.Context, beaconURL, p2pAddr string) (*Session, error) {
+	identity, err := utils.RaidanParticipantLibp2pKey()
+	if err != nil {
+		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+	}
+	return NewSessionWithIdentity(ctx, beaconURL, p2pAddr, identity)
+}
+
+// NewSessionWithIdentity connects a transient libp2p host using an explicit
+// local identity. Multi-identity probes must opt in explicitly through this
+// path.
+func NewSessionWithIdentity(ctx context.Context, beaconURL, p2pAddr string, identity libp2pcrypto.PrivKey) (*Session, error) {
+	if identity == nil {
+		return nil, errors.New("consensus local identity is nil")
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -60,6 +77,7 @@ func NewSession(ctx context.Context, beaconURL, p2pAddr string) (*Session, error
 		libp2p.NoListenAddrs,
 		libp2p.DefaultMuxers,
 		libp2p.Muxer(mplex.ID, mplex.DefaultTransport),
+		libp2p.Identity(identity),
 		libp2p.UserAgent("raidan-sdk/0.1"),
 	)
 	if err != nil {

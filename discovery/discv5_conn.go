@@ -9,10 +9,10 @@ import (
 	"net"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
 	"github.com/nethoxa-labs/raidan-sdk/session"
+	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 // Discv5Conn holds the live UDP connection plus the static crypto state.
@@ -26,9 +26,22 @@ type Discv5Conn struct {
 	ourNodeID  enode.ID
 }
 
-// DialDiscv5 opens a UDP socket aimed at the discv5 endpoint of the
-// given enode and generates a fresh static keypair for our side.
+// DialDiscv5 opens a UDP socket aimed at the discv5 endpoint using Raidan's
+// fixed public test identity.
 func DialDiscv5(ctx context.Context, target string) (*Discv5Conn, error) {
+	key, err := utils.RaidanParticipantKey()
+	if err != nil {
+		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+	}
+	return DialDiscv5WithKey(ctx, target, key)
+}
+
+// DialDiscv5WithKey opens a UDP socket with the supplied local static
+// identity. Multi-identity probes must opt in explicitly through this path.
+func DialDiscv5WithKey(ctx context.Context, target string, priv *ecdsa.PrivateKey) (*Discv5Conn, error) {
+	if priv == nil {
+		return nil, errors.New("discv5 local key is nil")
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -46,11 +59,6 @@ func DialDiscv5(ctx context.Context, target string) (*Discv5Conn, error) {
 	fd, err := listenUDPToPeer(peer)
 	if err != nil {
 		return nil, err
-	}
-	priv, err := crypto.GenerateKey()
-	if err != nil {
-		_ = fd.Close()
-		return nil, fmt.Errorf("generate key: %w", err)
 	}
 	session.Step(ctx, "[+] Opening discv5 session to %s", peer)
 	return &Discv5Conn{
