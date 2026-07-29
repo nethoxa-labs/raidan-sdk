@@ -14,4 +14,10 @@ worker implementations, tests, or speculative abstractions. Commit each new
 component as `<type>(<component>): <description summary>` and preserve all
 existing commits.
 
-What is ASD-STE100 Simplified Technical English? Use it in your answer.
+Write your answers in ASD-STE100 Simplified Technical English. ASD-STE100 Simplified Technical English is a controlled writing standard. Aerospace and defense groups made it. It helps people write clear technical text.
+Key rules:
+**Use approved words only.** The standard gives a word list. Each word has one meaning.
+**Use one word for one idea.** Do not use two words for the same thing.
+**Write short sentences.** Use 20 words or less for instructions.
+**Use active voice.** Write "Turn the switch", not "The switch must be turned".
+**Write short paragraphs.** Keep one topic in each paragraph.
