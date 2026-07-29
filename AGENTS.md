@@ -13,3 +13,5 @@ rewrite, modify, or republish them. Do not add compatibility paths, duplicate
 worker implementations, tests, or speculative abstractions. Commit each new
 component as `<type>(<component>): <description summary>` and preserve all
 existing commits.
+
+What is ASD-STE100 Simplified Technical English? Use it in your answer.
