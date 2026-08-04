@@ -10,12 +10,48 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/nethoxa-labs/raidan-sdk/session"
 )
 
 const rawRPCTimeout = 8 * time.Second
+
+// OpenRPCStream opens one negotiated gossipsub stream. The caller owns it.
+func OpenRPCStream(ctx context.Context, h host.Host, peerID peer.ID) (network.Stream, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if h == nil {
+		return nil, errors.New("nil gossipsub host")
+	}
+	if peerID == "" {
+		return nil, errors.New("empty gossipsub peer ID")
+	}
+	timeout := session.Timeout(ctx, rawRPCTimeout)
+	if timeout <= 0 {
+		return nil, context.DeadlineExceeded
+	}
+	openCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	stream, err := h.NewStream(
+		openCtx,
+		peerID,
+		pubsub.GossipSubID_v13,
+		pubsub.GossipSubID_v12,
+		pubsub.GossipSubID_v11,
+		pubsub.GossipSubID_v10,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("open gossipsub stream: %w", err)
+	}
+	if err := stream.SetDeadline(time.Now().Add(timeout)); err != nil {
+		_ = stream.Reset()
+		return nil, fmt.Errorf("set gossipsub stream deadline: %w", err)
+	}
+	return stream, nil
+}
 
 // SendRPC writes one caller-encoded protobuf RPC over a negotiated gossipsub
 // stream. The supplied bytes exclude the unsigned-varint stream prefix.
@@ -29,29 +65,13 @@ func SendRPC(ctx context.Context, h host.Host, peerID peer.ID, rpc []byte) error
 	if peerID == "" {
 		return errors.New("empty gossipsub peer ID")
 	}
-	timeout := session.Timeout(ctx, rawRPCTimeout)
-	if timeout <= 0 {
-		return context.DeadlineExceeded
-	}
-	sendCtx, cancel := context.WithTimeout(ctx, timeout)
+	sendCtx, cancel := context.WithTimeout(ctx, session.Timeout(ctx, rawRPCTimeout))
 	defer cancel()
-
-	stream, err := h.NewStream(
-		sendCtx,
-		peerID,
-		pubsub.GossipSubID_v13,
-		pubsub.GossipSubID_v12,
-		pubsub.GossipSubID_v11,
-		pubsub.GossipSubID_v10,
-	)
+	stream, err := OpenRPCStream(sendCtx, h, peerID)
 	if err != nil {
-		return fmt.Errorf("open gossipsub stream: %w", err)
+		return err
 	}
 	defer func() { _ = stream.Close() }()
-	if err := stream.SetDeadline(time.Now().Add(timeout)); err != nil {
-		_ = stream.Reset()
-		return fmt.Errorf("set gossipsub stream deadline: %w", err)
-	}
 
 	session.ObserveWrite(sendCtx, session.Write{
 		Protocol:   "gossipsub",

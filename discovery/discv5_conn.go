@@ -43,7 +43,7 @@ func DialDiscv5WithKey(ctx context.Context, target string, priv *ecdsa.PrivateKe
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	node, err := enode.ParseV4(target)
+	node, err := enode.Parse(enode.ValidSchemes, target)
 	if err != nil {
 		return nil, fmt.Errorf("parse enode: %w", err)
 	}
@@ -72,6 +72,15 @@ func DialDiscv5WithKey(ctx context.Context, target string, priv *ecdsa.PrivateKe
 
 // Close releases the UDP socket.
 func (s *Discv5Conn) Close() error { return s.fd.Close() }
+
+// LocalAddr returns the UDP endpoint used by this session.
+func (s *Discv5Conn) LocalAddr() *net.UDPAddr {
+	if s == nil || s.fd == nil {
+		return nil
+	}
+	address, _ := s.fd.LocalAddr().(*net.UDPAddr)
+	return address
+}
 
 // PeerAddr returns the peer UDP address.
 func (s *Discv5Conn) PeerAddr() *net.UDPAddr { return s.peerAddr }

@@ -30,6 +30,12 @@ type Discv5OrdinaryPacket struct {
 // EstablishSession performs the random-packet challenge and handshake needed
 // before ordinary discv5 messages can be exchanged.
 func (s *Discv5Conn) EstablishSession() (*Discv5Session, error) {
+	return s.EstablishSessionWithENR(nil)
+}
+
+// EstablishSessionWithENR performs a discv5 handshake and includes record in
+// the authentication header. A nil record uses the canonical local ENR.
+func (s *Discv5Conn) EstablishSessionWithENR(record []byte) (*Discv5Session, error) {
 	nonce, err := s.SendRandomOrdinary()
 	if err != nil {
 		return nil, fmt.Errorf("send ordinary: %w", err)
@@ -38,11 +44,11 @@ func (s *Discv5Conn) EstablishSession() (*Discv5Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read WHOAREYOU: %w", err)
 	}
-	return s.completeHandshake(w)
+	return s.completeHandshake(w, record)
 }
 
-func (s *Discv5Conn) completeHandshake(w *WhoAreYou) (*Discv5Session, error) {
-	_, established, err := s.sendHandshakeMessage(w)
+func (s *Discv5Conn) completeHandshake(w *WhoAreYou, record []byte) (*Discv5Session, error) {
+	_, established, err := s.sendHandshakeMessage(w, record)
 	return established, err
 }
 

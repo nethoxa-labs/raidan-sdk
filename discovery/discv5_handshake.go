@@ -78,7 +78,7 @@ func SealDiscv5Message(key, nonce, plaintext, associatedData []byte) ([]byte, er
 	return gcmSeal(key, nonce, plaintext, associatedData)
 }
 
-func (s *Discv5Conn) sendHandshakeMessage(w *WhoAreYou) ([12]byte, *Discv5Session, error) {
+func (s *Discv5Conn) sendHandshakeMessage(w *WhoAreYou, record []byte) ([12]byte, *Discv5Session, error) {
 	if w == nil {
 		return [12]byte{}, nil, errors.New("nil WHOAREYOU challenge")
 	}
@@ -104,9 +104,11 @@ func (s *Discv5Conn) sendHandshakeMessage(w *WhoAreYou) ([12]byte, *Discv5Sessio
 
 	sigSize := byte(len(sig))
 	pubkeySize := computedPublicKeySize
-	record, err := BuildV4ENR(1, s.ourPriv)
-	if err != nil {
-		return [12]byte{}, nil, fmt.Errorf("build record: %w", err)
+	if record == nil {
+		record, err = BuildV4ENR(1, s.ourPriv)
+		if err != nil {
+			return [12]byte{}, nil, fmt.Errorf("build record: %w", err)
+		}
 	}
 
 	authdataLength := discv5HandshakeAuthHeaderSize + len(sig) + len(ephPubCompressed) + len(record)

@@ -6,6 +6,7 @@ AGENTS.md
 CLAUDE.md
 LICENSE
 README.md
+discovery/consensus_endpoint.go
 discovery/discv4_conn.go
 discovery/discv4_enrrequest.go
 discovery/discv4_enrresponse.go
@@ -68,6 +69,7 @@ go.sum
 gossipsub/doc.go
 gossipsub/publish.go
 gossipsub/rpc.go
+gossipsub/rpc_builder.go
 gossipsub/topic.go
 reqresp/blobsidecarsbyrange.go
 reqresp/blobsidecarsbyroot.go
@@ -77,10 +79,12 @@ reqresp/conn.go
 reqresp/datacolumnsidecarsbyrange.go
 reqresp/datacolumnsidecarsbyroot.go
 reqresp/doc.go
+reqresp/endpoints.go
 reqresp/executionpayloadenvelopesbyrange.go
 reqresp/executionpayloadenvelopesbyroot.go
 reqresp/framing.go
 reqresp/goodbye.go
+reqresp/inbound.go
 reqresp/lightclientbootstrap.go
 reqresp/lightclientfinalityupdate.go
 reqresp/lightclientoptimisticupdate.go
@@ -88,6 +92,7 @@ reqresp/lightclientupdatesbyrange.go
 reqresp/metadata.go
 reqresp/ping.go
 reqresp/protocol.go
+reqresp/raw_stream.go
 reqresp/request.go
 reqresp/ssz.go
 reqresp/status.go
