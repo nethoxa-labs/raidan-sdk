@@ -22,6 +22,7 @@ var discoveryHTTPClient = &http.Client{Timeout: discoveryTimeout}
 type Target struct {
 	ExecutionURL string
 	ExecutionP2P string
+	ExecutionDNS string
 	ConsensusURL string
 	ConsensusP2P string
 	Client       string
@@ -35,6 +36,7 @@ func Discover(ctx context.Context, spec Target) (Target, error) {
 	}
 	spec.ExecutionURL = strings.TrimRight(strings.TrimSpace(spec.ExecutionURL), "/")
 	spec.ExecutionP2P = strings.TrimSpace(spec.ExecutionP2P)
+	spec.ExecutionDNS = strings.TrimSpace(spec.ExecutionDNS)
 	spec.ConsensusURL = strings.TrimRight(strings.TrimSpace(spec.ConsensusURL), "/")
 	spec.ConsensusP2P = strings.TrimSpace(spec.ConsensusP2P)
 	spec.Client = strings.TrimSpace(spec.Client)
