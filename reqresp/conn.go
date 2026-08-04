@@ -19,7 +19,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/nethoxa-labs/raidan-sdk/session"
-	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 const (
@@ -35,10 +34,13 @@ type Session struct {
 	addrs  []ma.Multiaddr
 }
 
-// NewSession connects a transient libp2p host using Raidan's fixed public test
-// identity.
+// NewSession connects a transient libp2p host using the current case identity.
 func NewSession(ctx context.Context, beaconURL, p2pAddr string) (*Session, error) {
-	identity, err := utils.RaidanParticipantLibp2pKey()
+	participant, err := session.ParticipantIdentity(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+	}
+	identity, err := participant.CLKey()
 	if err != nil {
 		return nil, fmt.Errorf("load Raidan participant key: %w", err)
 	}

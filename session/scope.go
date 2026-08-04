@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"os"
+
+	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 // Scope carries optional operation metadata through a context.
@@ -11,6 +13,7 @@ type Scope struct {
 	Output   io.Writer
 	Client   string
 	Observer Observer
+	Identity *utils.ParticipantIdentity
 	// Verbose enables per-step narration (Step). It is set for single-shot test
 	// cases and left off for high-volume replay loops that would flood.
 	Verbose bool
@@ -37,6 +40,9 @@ func With(ctx context.Context, scope Scope) context.Context {
 	if scope.Observer == nil {
 		scope.Observer = parent.Observer
 	}
+	if scope.Identity == nil {
+		scope.Identity = parent.Identity
+	}
 	if scope.Quiet {
 		scope.Verbose = false
 	} else if !scope.Verbose {
@@ -55,6 +61,15 @@ func Output(ctx context.Context) io.Writer {
 
 // Client returns the client label attached to ctx.
 func Client(ctx context.Context) string { return scopeFrom(ctx).Client }
+
+// ParticipantIdentity returns the case-scoped protocol identity. Direct SDK
+// callers without a scope retain the canonical public test identity.
+func ParticipantIdentity(ctx context.Context) (*utils.ParticipantIdentity, error) {
+	if identity := scopeFrom(ctx).Identity; identity != nil {
+		return identity, nil
+	}
+	return utils.RaidanParticipantIdentity()
+}
 
 func scopeFrom(ctx context.Context) Scope {
 	if ctx == nil {
