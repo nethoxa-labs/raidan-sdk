@@ -67,6 +67,7 @@ eth/wire.go
 go.mod
 go.sum
 gossipsub/doc.go
+gossipsub/execution_proof.go
 gossipsub/publish.go
 gossipsub/rpc.go
 gossipsub/rpc_builder.go
@@ -80,6 +81,7 @@ reqresp/datacolumnsidecarsbyrange.go
 reqresp/datacolumnsidecarsbyroot.go
 reqresp/doc.go
 reqresp/endpoints.go
+reqresp/execution_proofs.go
 reqresp/executionpayloadenvelopesbyrange.go
 reqresp/executionpayloadenvelopesbyroot.go
 reqresp/framing.go
