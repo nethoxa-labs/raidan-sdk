@@ -75,17 +75,22 @@ func (identity *ParticipantIdentity) ELPeerIdentities() ([]string, error) {
 	return []string{nodeID, publicKey}, nil
 }
 
-// CLPeerID returns the libp2p peer ID for this identity.
-func (identity *ParticipantIdentity) CLPeerID() (string, error) {
+// CLPeerIdentities returns the exact libp2p peer ID and discv5 node ID.
+func (identity *ParticipantIdentity) CLPeerIdentities() ([]string, error) {
 	key, err := identity.CLKey()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	id, err := peer.IDFromPrivateKey(key)
 	if err != nil {
-		return "", fmt.Errorf("derive participant peer ID: %w", err)
+		return nil, fmt.Errorf("derive participant peer ID: %w", err)
 	}
-	return id.String(), nil
+	secp256k1Key, err := identity.ELKey()
+	if err != nil {
+		return nil, err
+	}
+	nodeID := fmt.Sprintf("%x", crypto.Keccak256(crypto.FromECDSAPub(&secp256k1Key.PublicKey)[1:]))
+	return []string{id.String(), nodeID}, nil
 }
 
 // DeterministicKey derives the same secp256k1 key for the same label. It is
