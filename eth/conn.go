@@ -20,7 +20,6 @@ import (
 	sdkrlpx "github.com/nethoxa-labs/raidan-sdk/rlpx"
 	ethrpc "github.com/nethoxa-labs/raidan-sdk/rpc"
 	"github.com/nethoxa-labs/raidan-sdk/session"
-	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 // capabilityList renders offered capabilities as "eth/68, snap/1" for logs.
@@ -87,9 +86,9 @@ type PreStatusConn struct {
 // ETH Status. Capabilities defaults to eth/69 and eth/68; supplying
 // Config.Capabilities uses that exact ordered list.
 func DialPreStatus(ctx context.Context, target, rpcURL string, config Config) (*PreStatusConn, error) {
-	key, err := utils.RaidanParticipantKey()
+	key, err := session.ParticipantELKey(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+		return nil, fmt.Errorf("load case participant key: %w", err)
 	}
 	return DialPreStatusWithKey(ctx, target, rpcURL, config, key)
 }
@@ -268,9 +267,9 @@ func (c *PreStatusConn) Close() { _ = c.fd.Close() }
 // Dial performs RLPx, Hello, and Status and returns a ready ETH connection.
 // MaxVersion defaults to 70, matching the broadly deployed protocol baseline.
 func Dial(ctx context.Context, target, rpc string, config Config) (*Conn, error) {
-	key, err := utils.RaidanParticipantKey()
+	key, err := session.ParticipantELKey(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+		return nil, fmt.Errorf("load case participant key: %w", err)
 	}
 	return DialWithKey(ctx, target, rpc, config, key)
 }

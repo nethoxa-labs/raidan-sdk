@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/nethoxa-labs/raidan-sdk/session"
-	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 // Discv4Conn owns a UDP socket and a local key. It handles the
@@ -78,11 +77,11 @@ func ExpectAnyDiscv4Reply(conn *Discv4Conn, timeout time.Duration) bool {
 	return false
 }
 
-// DialDiscv4 opens a UDP socket using Raidan's fixed public test identity.
+// DialDiscv4 opens a UDP socket using the current case identity.
 func DialDiscv4(ctx context.Context, target string) (*Discv4Conn, error) {
-	key, err := utils.RaidanParticipantKey()
+	key, err := session.ParticipantELKey(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+		return nil, fmt.Errorf("load case participant key: %w", err)
 	}
 	return DialDiscv4WithKey(ctx, target, key)
 }

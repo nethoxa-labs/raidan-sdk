@@ -12,7 +12,6 @@ import (
 	ethsdk "github.com/nethoxa-labs/raidan-sdk/eth"
 	sdkrlpx "github.com/nethoxa-labs/raidan-sdk/rlpx"
 	"github.com/nethoxa-labs/raidan-sdk/session"
-	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 // ErrUnsupported reports that the peer did not negotiate WIT/1.
@@ -28,9 +27,9 @@ type Conn struct {
 // Dial negotiates ETH/68 or ETH/69 and WIT/1, then completes the ETH Status
 // exchange. The returned connection is ready for WIT messages.
 func Dial(ctx context.Context, target, rpc string) (*Conn, error) {
-	key, err := utils.RaidanParticipantKey()
+	key, err := session.ParticipantELKey(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+		return nil, fmt.Errorf("load case participant key: %w", err)
 	}
 	return DialWithKey(ctx, target, rpc, key)
 }

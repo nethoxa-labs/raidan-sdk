@@ -21,5 +21,8 @@ func Run(ctx context.Context, test Test, target Target, scope Scope) Result {
 		scope.Client = target.Client
 	}
 	ctx = session.With(ctx, scope)
+	if _, err := session.ParticipantIdentity(ctx); err != nil {
+		return result.Invalid(err.Error())
+	}
 	return test(ctx, target)
 }

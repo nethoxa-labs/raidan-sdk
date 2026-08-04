@@ -25,7 +25,6 @@ import (
 	"github.com/golang/snappy"
 
 	"github.com/nethoxa-labs/raidan-sdk/session"
-	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 const maxFrameSize = 0xffffff
@@ -53,12 +52,11 @@ type frameMAC struct {
 	seed   [32]byte
 }
 
-// DialRLPx opens a bare RLPx connection without sending Hello using Raidan's
-// fixed public test identity.
+// DialRLPx opens a bare RLPx connection using the current case identity.
 func DialRLPx(ctx context.Context, target string) (*Conn, net.Conn, error) {
-	key, err := utils.RaidanParticipantKey()
+	key, err := session.ParticipantELKey(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("load Raidan participant key: %w", err)
+		return nil, nil, fmt.Errorf("load case participant key: %w", err)
 	}
 	session.Step(ctx, "[+] Dialing RLPx peer %s", target)
 	return DialWithKey(ctx, target, key)

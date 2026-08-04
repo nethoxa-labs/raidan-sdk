@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
 	"github.com/nethoxa-labs/raidan-sdk/session"
-	"github.com/nethoxa-labs/raidan-sdk/utils"
 )
 
 // Discv5Conn holds the live UDP connection plus the static crypto state.
@@ -26,12 +25,11 @@ type Discv5Conn struct {
 	ourNodeID  enode.ID
 }
 
-// DialDiscv5 opens a UDP socket aimed at the discv5 endpoint using Raidan's
-// fixed public test identity.
+// DialDiscv5 opens a UDP socket using the current case identity.
 func DialDiscv5(ctx context.Context, target string) (*Discv5Conn, error) {
-	key, err := utils.RaidanParticipantKey()
+	key, err := session.ParticipantELKey(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("load Raidan participant key: %w", err)
+		return nil, fmt.Errorf("load case participant key: %w", err)
 	}
 	return DialDiscv5WithKey(ctx, target, key)
 }

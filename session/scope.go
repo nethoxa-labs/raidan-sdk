@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"errors"
 	"io"
 	"os"
 
@@ -10,10 +12,10 @@ import (
 
 // Scope carries optional operation metadata through a context.
 type Scope struct {
-	Output   io.Writer
-	Client   string
-	Observer Observer
-	Identity *utils.ParticipantIdentity
+	Output     io.Writer
+	Client     string
+	Observer   Observer
+	Identities []*utils.ParticipantIdentity
 	// Verbose enables per-step narration (Step). It is set for single-shot test
 	// cases and left off for high-volume replay loops that would flood.
 	Verbose bool
@@ -40,8 +42,8 @@ func With(ctx context.Context, scope Scope) context.Context {
 	if scope.Observer == nil {
 		scope.Observer = parent.Observer
 	}
-	if scope.Identity == nil {
-		scope.Identity = parent.Identity
+	if len(scope.Identities) == 0 {
+		scope.Identities = parent.Identities
 	}
 	if scope.Quiet {
 		scope.Verbose = false
@@ -62,13 +64,32 @@ func Output(ctx context.Context) io.Writer {
 // Client returns the client label attached to ctx.
 func Client(ctx context.Context) string { return scopeFrom(ctx).Client }
 
-// ParticipantIdentity returns the case-scoped protocol identity. Direct SDK
-// callers without a scope retain the canonical public test identity.
+// ParticipantIdentity returns the required case-scoped protocol identity.
 func ParticipantIdentity(ctx context.Context) (*utils.ParticipantIdentity, error) {
-	if identity := scopeFrom(ctx).Identity; identity != nil {
-		return identity, nil
+	return ParticipantIdentityAt(ctx, 0)
+}
+
+// ParticipantIdentityAt returns one exact peer identity for the current case.
+func ParticipantIdentityAt(ctx context.Context, index int) (*utils.ParticipantIdentity, error) {
+	identities := scopeFrom(ctx).Identities
+	if index < 0 || index >= len(identities) || identities[index] == nil {
+		return nil, errors.New("participant identity is not configured")
 	}
-	return utils.RaidanParticipantIdentity()
+	return identities[index], nil
+}
+
+// ParticipantELKey returns the execution-layer key for the current case.
+func ParticipantELKey(ctx context.Context) (*ecdsa.PrivateKey, error) {
+	return ParticipantELKeyAt(ctx, 0)
+}
+
+// ParticipantELKeyAt returns one execution-layer key for the current case.
+func ParticipantELKeyAt(ctx context.Context, index int) (*ecdsa.PrivateKey, error) {
+	identity, err := ParticipantIdentityAt(ctx, index)
+	if err != nil {
+		return nil, err
+	}
+	return identity.ELKey()
 }
 
 func scopeFrom(ctx context.Context) Scope {
