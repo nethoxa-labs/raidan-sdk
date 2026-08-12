@@ -3,6 +3,7 @@ package sdk
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 
 	"github.com/nethoxa-labs/raidan-sdk/result"
 	"github.com/nethoxa-labs/raidan-sdk/session"
@@ -27,7 +28,7 @@ func Run(ctx context.Context, test Test, target Target, scope Scope) (outcome Re
 	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			outcome = result.Error(fmt.Sprintf("portable case panicked: %v", recovered))
+			outcome = result.Error(fmt.Sprintf("portable case panicked: %v\n%s", recovered, debug.Stack()))
 		}
 	}()
 	return test(ctx, target)
