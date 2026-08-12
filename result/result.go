@@ -27,29 +27,27 @@ type Result struct {
 	Detail  string
 }
 
-// Verdict is a stable, machine-readable operation classification:
+// Verdict is a stable, machine-readable case classification:
 //
-//	ACCEPT      the connection was still alive
-//	DISCONNECT  the target disconnected us
-//	TIMEOUT     the target did not respond within the wait window
-//	INVALID     the operation could not reach a meaningful verdict
-//	BUG         a product-level bug was detected
-//	CRASH       the target client crashed
+//	ACCEPT      the target accepted the payload or kept the connection usable
+//	DISCONNECT  the target disconnected because of the case
+//	TIMEOUT     the target did not complete the required interaction in time
+//	ERROR       Raidan could not execute or classify the case
+//
+// A case cannot report BUG or CRASH. The network worker assigns BUG from its
+// approved log signatures. The target observer assigns CRASH from container
+// death during the case window.
 type Verdict string
 
 const (
-	// VerdictAccept means the target behaved as expected.
+	// VerdictAccept means the target accepted the payload or kept the connection usable.
 	VerdictAccept Verdict = "ACCEPT"
-	// VerdictDisconnect means the target unexpectedly closed the connection.
+	// VerdictDisconnect means the target closed the connection because of the case.
 	VerdictDisconnect Verdict = "DISCONNECT"
-	// VerdictTimeout means the target did not respond within the allowed window.
+	// VerdictTimeout means the target did not complete the required interaction in time.
 	VerdictTimeout Verdict = "TIMEOUT"
-	// VerdictInvalid means the case could not reach a meaningful conclusion.
-	VerdictInvalid Verdict = "INVALID"
-	// VerdictBug means the target violated the case expectation.
-	VerdictBug Verdict = "BUG"
-	// VerdictCrash means the target process terminated during the case.
-	VerdictCrash Verdict = "CRASH"
+	// VerdictError means Raidan could not execute or classify the case.
+	VerdictError Verdict = "ERROR"
 )
 
 // Print writes one colored, human-readable verdict line. Keeping rendering
@@ -85,17 +83,7 @@ func Timeout(detail string) Result {
 	return Result{Verdict: VerdictTimeout, Detail: detail}
 }
 
-// Invalid reports that an error prevented a meaningful classification.
-func Invalid(detail string) Result {
-	return Result{Verdict: VerdictInvalid, Detail: detail}
-}
-
-// Bug reports protocol behavior that violates the case expectation.
-func Bug(detail string) Result {
-	return Result{Verdict: VerdictBug, Detail: detail}
-}
-
-// Crash reports that the target process terminated while handling the case.
-func Crash(detail string) Result {
-	return Result{Verdict: VerdictCrash, Detail: detail}
+// Error reports that Raidan could not execute or classify the case.
+func Error(detail string) Result {
+	return Result{Verdict: VerdictError, Detail: detail}
 }

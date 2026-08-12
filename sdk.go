@@ -31,16 +31,12 @@ type Write = session.Write
 type Test = target.Test
 
 const (
-	// VerdictAccept indicates that the target behaved as expected.
+	// VerdictAccept indicates that the target accepted the payload or kept the connection usable.
 	VerdictAccept = result.VerdictAccept
-	// VerdictDisconnect indicates that the target disconnected unexpectedly.
+	// VerdictDisconnect indicates that the target disconnected because of the case.
 	VerdictDisconnect = result.VerdictDisconnect
-	// VerdictTimeout indicates that the target did not respond in time.
+	// VerdictTimeout indicates that the target did not complete the required interaction in time.
 	VerdictTimeout = result.VerdictTimeout
-	// VerdictInvalid indicates an invalid or inconclusive target response.
-	VerdictInvalid = result.VerdictInvalid
-	// VerdictBug indicates a protocol bug in the target.
-	VerdictBug = result.VerdictBug
-	// VerdictCrash indicates that the target crashed.
-	VerdictCrash = result.VerdictCrash
+	// VerdictError indicates that Raidan could not execute or classify the case.
+	VerdictError = result.VerdictError
 )
