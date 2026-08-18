@@ -37,6 +37,8 @@ const (
 	VerdictDisconnect = result.VerdictDisconnect
 	// VerdictTimeout indicates that the target did not complete the required interaction in time.
 	VerdictTimeout = result.VerdictTimeout
+	// VerdictInvalid indicates that the case is not applicable to the selected target or image.
+	VerdictInvalid = result.VerdictInvalid
 	// VerdictError indicates that Raidan could not execute or classify the case.
 	VerdictError = result.VerdictError
 )

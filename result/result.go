@@ -32,6 +32,7 @@ type Result struct {
 //	ACCEPT      the target accepted the payload or kept the connection usable
 //	DISCONNECT  the target disconnected because of the case
 //	TIMEOUT     the target did not complete the required interaction in time
+//	INVALID     the case is not applicable to the selected target or image
 //	ERROR       Raidan could not execute or classify the case
 //
 // A case cannot report BUG or CRASH. The network worker assigns BUG from its
@@ -46,6 +47,8 @@ const (
 	VerdictDisconnect Verdict = "DISCONNECT"
 	// VerdictTimeout means the target did not complete the required interaction in time.
 	VerdictTimeout Verdict = "TIMEOUT"
+	// VerdictInvalid means the case is not applicable to the selected target or image.
+	VerdictInvalid Verdict = "INVALID"
 	// VerdictError means Raidan could not execute or classify the case.
 	VerdictError Verdict = "ERROR"
 )
@@ -81,6 +84,11 @@ func Disconnect(detail string) Result {
 // Timeout reports that an operation exceeded its response window.
 func Timeout(detail string) Result {
 	return Result{Verdict: VerdictTimeout, Detail: detail}
+}
+
+// Invalid reports that the case is not applicable to the selected target or image.
+func Invalid(detail string) Result {
+	return Result{Verdict: VerdictInvalid, Detail: detail}
 }
 
 // Error reports that Raidan could not execute or classify the case.
