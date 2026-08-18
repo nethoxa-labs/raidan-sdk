@@ -102,31 +102,11 @@ func ProtocolLength(version uint) (uint64, error) {
 	}
 }
 
-func highestCommonEthVersion(local, remote []p2p.Cap) uint {
-	localEth := make(map[uint]bool, len(local))
-	for _, cap := range local {
-		if cap.Name == "eth" && cap.Version >= 68 && cap.Version <= 72 {
-			localEth[cap.Version] = true
-		}
-	}
-
-	var best uint
-	for _, cap := range remote {
-		if cap.Name == "eth" && cap.Version >= 68 && cap.Version <= 72 && localEth[cap.Version] && cap.Version > best {
-			best = cap.Version
-		}
-	}
-	return best
-}
-
-// capabilityOffset returns the canonical devp2p wire offset for the highest
-// mutually supported version of name. Negotiated capability names are ordered
-// lexicographically and only one version per name occupies message space.
-func capabilityOffset(local, remote []p2p.Cap, name string) (uint64, uint, bool, error) {
+func negotiatedCapabilities(local, remote []p2p.Cap) ([]p2p.Cap, error) {
 	localVersions := make(map[string]map[uint]struct{})
 	for _, capability := range local {
 		if !supportedCapability(capability) {
-			return 0, 0, false, fmt.Errorf("unsupported local capability %s/%d", capability.Name, capability.Version)
+			return nil, fmt.Errorf("unsupported local capability %s/%d", capability.Name, capability.Version)
 		}
 		versions := localVersions[capability.Name]
 		if versions == nil {
@@ -135,24 +115,36 @@ func capabilityOffset(local, remote []p2p.Cap, name string) (uint64, uint, bool,
 		}
 		versions[capability.Version] = struct{}{}
 	}
-	negotiated := make(map[string]uint)
+
+	versions := make(map[string]uint)
 	for _, capability := range remote {
-		if _, ok := localVersions[capability.Name][capability.Version]; ok && capability.Version > negotiated[capability.Name] {
-			negotiated[capability.Name] = capability.Version
+		if _, ok := localVersions[capability.Name][capability.Version]; ok && capability.Version > versions[capability.Name] {
+			versions[capability.Name] = capability.Version
 		}
 	}
-	names := make([]string, 0, len(negotiated))
-	for capabilityName := range negotiated {
-		names = append(names, capabilityName)
+	names := make([]string, 0, len(versions))
+	for name := range versions {
+		names = append(names, name)
 	}
 	slices.Sort(names)
+
+	capabilities := make([]p2p.Cap, 0, len(names))
+	for _, name := range names {
+		capabilities = append(capabilities, p2p.Cap{Name: name, Version: versions[name]})
+	}
+	return capabilities, nil
+}
+
+// capabilityOffset returns the canonical devp2p wire offset for name.
+// Negotiated capability names are ordered lexicographically and only one
+// version per name occupies message space.
+func capabilityOffset(negotiated []p2p.Cap, name string) (uint64, uint, bool, error) {
 	offset := uint64(baseProtocolLength)
-	for _, capabilityName := range names {
-		version := negotiated[capabilityName]
-		if capabilityName == name {
-			return offset, version, true, nil
+	for _, capability := range negotiated {
+		if capability.Name == name {
+			return offset, capability.Version, true, nil
 		}
-		length, err := capabilityProtocolLength(capabilityName, version)
+		length, err := capabilityProtocolLength(capability.Name, capability.Version)
 		if err != nil {
 			return 0, 0, false, err
 		}

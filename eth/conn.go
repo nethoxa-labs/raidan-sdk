@@ -22,7 +22,7 @@ import (
 	"github.com/nethoxa-labs/raidan-sdk/session"
 )
 
-// capabilityList renders offered capabilities as "eth/68, snap/1" for logs.
+// capabilityList renders capabilities as "eth/68, snap/1" for logs.
 func capabilityList(caps []p2p.Cap) string {
 	parts := make([]string, len(caps))
 	for i, capability := range caps {
@@ -58,6 +58,7 @@ type Conn struct {
 	ethOffset  uint64
 	snapOffset uint64
 	ethVer     uint
+	negotiated []p2p.Cap
 	params     ethrpc.ChainParams
 	dead       chan struct{}
 	msgs       chan connMsg
@@ -174,18 +175,18 @@ func DialPreStatusWithKey(ctx context.Context, target, rpcURL string, config Con
 		rlpxConn.SetSnappy(true)
 	}
 
-	ethVersion := highestCommonEthVersion(caps, peerHello.Caps)
-	if ethVersion == 0 {
-		return closeOnError(errors.New("no common eth version"))
+	negotiated, err := negotiatedCapabilities(caps, peerHello.Caps)
+	if err != nil {
+		return closeOnError(fmt.Errorf("compute negotiated capabilities: %w", err))
 	}
-	ethOffset, _, ok, err := capabilityOffset(caps, peerHello.Caps, "eth")
+	ethOffset, ethVersion, ok, err := capabilityOffset(negotiated, "eth")
 	if err != nil {
 		return closeOnError(fmt.Errorf("compute ETH capability offset: %w", err))
 	}
 	if !ok {
-		return closeOnError(errors.New("negotiated ETH capability has no canonical offset"))
+		return closeOnError(errors.New("no common eth version"))
 	}
-	snapOffset, _, _, err := capabilityOffset(caps, peerHello.Caps, "snap")
+	snapOffset, _, _, err := capabilityOffset(negotiated, "snap")
 	if err != nil {
 		return closeOnError(fmt.Errorf("compute SNAP capability offset: %w", err))
 	}
@@ -304,7 +305,7 @@ func DialWithKey(ctx context.Context, target, rpc string, config Config, key *ec
 	conn, peerFID, dialErr := rawDial(ctx, node, &dialParams, key, caps)
 	if dialErr == nil {
 		session.Step(ctx, "[+] RLPx handshake complete")
-		session.Step(ctx, "[*] Negotiated capabilities: %s", capabilityList(caps))
+		session.Step(ctx, "[*] Negotiated capabilities: %s", capabilityList(conn.negotiated))
 		go conn.reader()
 		return conn, nil
 	}
@@ -320,7 +321,7 @@ func DialWithKey(ctx context.Context, target, rpc string, config Config, key *ec
 		return nil, dialErr
 	}
 	session.Step(ctx, "[+] RLPx handshake complete (fork-id retry)")
-	session.Step(ctx, "[*] Negotiated capabilities: %s", capabilityList(caps))
+	session.Step(ctx, "[*] Negotiated capabilities: %s", capabilityList(conn.negotiated))
 	go conn.reader()
 	return conn, nil
 }
@@ -636,9 +637,17 @@ func rawDial(ctx context.Context, node *enode.Node, cp *ethrpc.ChainParams, key 
 		rc.SetSnappy(true)
 	}
 
-	// Negotiate highest common eth version.
-	ethVer := highestCommonEthVersion(caps, peerHello.Caps)
-	if ethVer == 0 {
+	negotiated, err := negotiatedCapabilities(caps, peerHello.Caps)
+	if err != nil {
+		_ = fd.Close()
+		return nil, forkid.ID{}, fmt.Errorf("compute negotiated capabilities: %w", err)
+	}
+	ethOffset, ethVer, ok, err := capabilityOffset(negotiated, "eth")
+	if err != nil {
+		_ = fd.Close()
+		return nil, forkid.ID{}, fmt.Errorf("compute ETH capability offset: %w", err)
+	}
+	if !ok {
 		_ = fd.Close()
 		return nil, forkid.ID{}, errors.New("no common eth version")
 	}
@@ -648,16 +657,7 @@ func rawDial(ctx context.Context, node *enode.Node, cp *ethrpc.ChainParams, key 
 	}
 
 	// Check snap support
-	ethOffset, _, ok, err := capabilityOffset(caps, peerHello.Caps, "eth")
-	if err != nil {
-		_ = fd.Close()
-		return nil, forkid.ID{}, fmt.Errorf("compute ETH capability offset: %w", err)
-	}
-	if !ok {
-		_ = fd.Close()
-		return nil, forkid.ID{}, errors.New("negotiated ETH capability has no canonical offset")
-	}
-	snapOffset, _, _, err := capabilityOffset(caps, peerHello.Caps, "snap")
+	snapOffset, _, _, err := capabilityOffset(negotiated, "snap")
 	if err != nil {
 		_ = fd.Close()
 		return nil, forkid.ID{}, fmt.Errorf("compute SNAP capability offset: %w", err)
@@ -729,6 +729,7 @@ readStatus:
 		ethOffset:  ethOffset,
 		snapOffset: snapOffset,
 		ethVer:     ethVer,
+		negotiated: negotiated,
 		params:     *cp,
 		dead:       make(chan struct{}),
 		msgs:       make(chan connMsg, 256),
