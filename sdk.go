@@ -7,7 +7,7 @@ import (
 )
 
 // Version identifies this SDK release.
-const Version = "v0.2.0"
+const Version = "v0.2.1"
 
 // Target describes the execution and consensus endpoints exercised by a case.
 type Target = target.Target
