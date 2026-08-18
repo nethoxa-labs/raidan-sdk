@@ -146,7 +146,7 @@ func consensusGetJSON(ctx context.Context, baseURL, path string, output any) err
 		return err
 	}
 	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + path
-	timeout := session.Timeout(ctx, 5*time.Second)
+	timeout := session.Remaining(ctx, 5*time.Second)
 	requestCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint.String(), nil)

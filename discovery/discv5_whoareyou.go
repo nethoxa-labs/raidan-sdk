@@ -26,7 +26,7 @@ func (s *Discv5Conn) ReadWhoAreYou(timeout time.Duration) (*WhoAreYou, error) {
 }
 
 func (s *Discv5Conn) readWhoAreYou(timeout time.Duration, expectedNonce *[12]byte) (*WhoAreYou, error) {
-	deadline := time.Now().Add(session.Timeout(s.ctx, timeout))
+	deadline := time.Now().Add(session.Remaining(s.ctx, timeout))
 	buf := make([]byte, 1280)
 	for {
 		remaining := time.Until(deadline)

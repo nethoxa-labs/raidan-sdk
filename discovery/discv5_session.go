@@ -114,7 +114,7 @@ func (s *Discv5Conn) ReadOrdinary(sess *Discv5Session, timeout time.Duration) (*
 	if sess == nil {
 		return nil, errors.New("nil session")
 	}
-	deadline := time.Now().Add(session.Timeout(s.ctx, timeout))
+	deadline := time.Now().Add(session.Remaining(s.ctx, timeout))
 	buf := make([]byte, discv4MaxPacketSize)
 	var lastErr error
 	for {
@@ -142,7 +142,7 @@ func (s *Discv5Conn) ReadOrdinary(sess *Discv5Session, timeout time.Duration) (*
 
 // ReadOrdinaryMessage waits for a decrypted ordinary packet with msgType.
 func (s *Discv5Conn) ReadOrdinaryMessage(sess *Discv5Session, msgType byte, timeout time.Duration) (*Discv5OrdinaryPacket, error) {
-	deadline := time.Now().Add(session.Timeout(s.ctx, timeout))
+	deadline := time.Now().Add(session.Remaining(s.ctx, timeout))
 	for {
 		remain := time.Until(deadline)
 		if remain <= 0 {

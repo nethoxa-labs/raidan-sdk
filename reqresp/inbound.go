@@ -122,14 +122,14 @@ func (s *Session) Accept(ctx context.Context, proto string, options AcceptOption
 		return nil, fmt.Errorf("max request payload %d exceeds hard ceiling %d", options.MaxPayload, MaxPayloadSize)
 	}
 
-	waitCtx, cancel := context.WithTimeout(ctx, session.Timeout(ctx, options.Timeout))
+	waitCtx, cancel := context.WithTimeout(ctx, session.Remaining(ctx, options.Timeout))
 	defer cancel()
 
 	requests := make(chan *InboundRequest, 1)
 	errorsCh := make(chan error, 1)
 	protocolID := protocol.ID(proto)
 	s.host.SetStreamHandler(protocolID, func(stream network.Stream) {
-		_ = stream.SetDeadline(time.Now().Add(options.Timeout))
+		_ = stream.SetDeadline(time.Now().Add(session.Remaining(ctx, options.Timeout)))
 		payload := []byte(nil)
 		var err error
 		if !options.NoBody {

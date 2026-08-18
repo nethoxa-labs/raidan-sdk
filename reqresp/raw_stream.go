@@ -30,7 +30,7 @@ func (s *Session) OpenStream(ctx context.Context, protocolID string, timeout tim
 	if timeout <= 0 {
 		timeout = 8 * time.Second
 	}
-	timeout = session.Timeout(ctx, timeout)
+	timeout = session.Remaining(ctx, timeout)
 	openCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	s.pinExplicitAddrs()

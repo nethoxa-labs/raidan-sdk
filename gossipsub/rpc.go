@@ -29,7 +29,7 @@ func OpenRPCStream(ctx context.Context, h host.Host, peerID peer.ID) (network.St
 	if peerID == "" {
 		return nil, errors.New("empty gossipsub peer ID")
 	}
-	timeout := session.Timeout(ctx, rawRPCTimeout)
+	timeout := session.Remaining(ctx, rawRPCTimeout)
 	if timeout <= 0 {
 		return nil, context.DeadlineExceeded
 	}
@@ -65,7 +65,7 @@ func SendRPC(ctx context.Context, h host.Host, peerID peer.ID, rpc []byte) error
 	if peerID == "" {
 		return errors.New("empty gossipsub peer ID")
 	}
-	sendCtx, cancel := context.WithTimeout(ctx, session.Timeout(ctx, rawRPCTimeout))
+	sendCtx, cancel := context.WithTimeout(ctx, session.Remaining(ctx, rawRPCTimeout))
 	defer cancel()
 	stream, err := OpenRPCStream(sendCtx, h, peerID)
 	if err != nil {

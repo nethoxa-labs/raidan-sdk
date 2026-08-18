@@ -57,7 +57,7 @@ func NewSessionWithIdentity(ctx context.Context, beaconURL, p2pAddr string, iden
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	dialCtx, cancel := context.WithTimeout(ctx, session.Timeout(ctx, consensusDialTimeout))
+	dialCtx, cancel := context.WithTimeout(ctx, session.Remaining(ctx, consensusDialTimeout))
 	defer cancel()
 
 	peerID, err := PeerID(ctx, beaconURL, p2pAddr)

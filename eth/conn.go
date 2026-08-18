@@ -129,7 +129,7 @@ func DialPreStatusWithKey(ctx context.Context, target, rpcURL string, config Con
 		_ = fd.Close()
 		return nil, err
 	}
-	if err := fd.SetDeadline(time.Now().Add(session.Timeout(ctx, 10*time.Second))); err != nil {
+	if err := fd.SetDeadline(time.Now().Add(session.Remaining(ctx, 10*time.Second))); err != nil {
 		return closeOnError(fmt.Errorf("set hello deadline: %w", err))
 	}
 
@@ -394,7 +394,7 @@ func (c *Conn) writeWire(wire WireReadWriter, code uint64, payload []byte) (uint
 // ReadMsg returns the next message from the peer (excluding ping/pong/disc
 // which are handled internally). Returns the raw wire code, data, and error.
 func (c *Conn) ReadMsg(timeout time.Duration) (uint64, []byte, error) {
-	timeout = session.Timeout(c.ctx, timeout)
+	timeout = session.Remaining(c.ctx, timeout)
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
@@ -412,7 +412,7 @@ func (c *Conn) ReadMsg(timeout time.Duration) (uint64, []byte, error) {
 // WaitForMsg reads messages until one with the expected wire code arrives,
 // discarding any others. Returns the message data.
 func (c *Conn) WaitForMsg(timeout time.Duration, wantCode uint64) ([]byte, error) {
-	timer := time.NewTimer(session.Timeout(c.ctx, timeout))
+	timer := time.NewTimer(session.Remaining(c.ctx, timeout))
 	defer timer.Stop()
 	for {
 		select {
@@ -435,7 +435,7 @@ func (c *Conn) WaitForMsg(timeout time.Duration, wantCode uint64) ([]byte, error
 // WaitDisconnect blocks until the peer disconnects or the timeout expires.
 // Returns true if the peer disconnected.
 func (c *Conn) WaitDisconnect(timeout time.Duration) bool {
-	timer := time.NewTimer(session.Timeout(c.ctx, timeout))
+	timer := time.NewTimer(session.Remaining(c.ctx, timeout))
 	defer timer.Stop()
 	select {
 	case <-c.dead:
@@ -584,7 +584,7 @@ func rawDial(ctx context.Context, node *enode.Node, cp *ethrpc.ChainParams, key 
 	if err != nil {
 		return nil, forkid.ID{}, fmt.Errorf("rlpx handshake: %w", err)
 	}
-	if err := fd.SetDeadline(time.Now().Add(session.Timeout(ctx, 10*time.Second))); err != nil {
+	if err := fd.SetDeadline(time.Now().Add(session.Remaining(ctx, 10*time.Second))); err != nil {
 		_ = fd.Close()
 		return nil, forkid.ID{}, fmt.Errorf("set hello deadline: %w", err)
 	}
@@ -680,7 +680,7 @@ func rawDial(ctx context.Context, node *enode.Node, cp *ethrpc.ChainParams, key 
 
 	// Read peer's Status
 	var peerFID forkid.ID
-	if err := fd.SetDeadline(time.Now().Add(session.Timeout(ctx, 10*time.Second))); err != nil {
+	if err := fd.SetDeadline(time.Now().Add(session.Remaining(ctx, 10*time.Second))); err != nil {
 		_ = fd.Close()
 		return nil, peerFID, fmt.Errorf("set status deadline: %w", err)
 	}

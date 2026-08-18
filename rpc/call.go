@@ -19,7 +19,7 @@ const (
 	maxRPCResponseBytes = 4 << 20
 )
 
-var rpcHTTPClient = &http.Client{Timeout: rpcCallTimeout}
+var rpcHTTPClient = &http.Client{}
 
 // Call performs a bounded JSON-RPC request and returns the raw result.
 func Call(ctx context.Context, url, method string, params ...any) (json.RawMessage, error) {
@@ -35,7 +35,7 @@ func Call(ctx context.Context, url, method string, params ...any) (json.RawMessa
 	if err != nil {
 		return nil, fmt.Errorf("encode rpc request: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, session.Timeout(ctx, rpcCallTimeout))
+	ctx, cancel := context.WithTimeout(ctx, session.Remaining(ctx, rpcCallTimeout))
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {

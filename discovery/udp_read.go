@@ -16,7 +16,7 @@ func readUDPWithContext(ctx context.Context, fd *net.UDPConn, buffer []byte, tim
 	if err := ctx.Err(); err != nil {
 		return 0, nil, err
 	}
-	remaining := session.Timeout(ctx, timeout)
+	remaining := session.Remaining(ctx, timeout)
 	if remaining <= 0 {
 		if err := ctx.Err(); err != nil {
 			return 0, nil, err

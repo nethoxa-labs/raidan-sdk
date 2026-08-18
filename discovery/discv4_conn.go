@@ -58,6 +58,7 @@ func SameUDPAddr(left, right *net.UDPAddr) bool {
 // ExpectAnyDiscv4Reply waits up to timeout for any discv4 datagram from the
 // connection's peer, ignoring datagrams from other sources.
 func ExpectAnyDiscv4Reply(conn *Discv4Conn, timeout time.Duration) bool {
+	timeout = session.Remaining(conn.ctx, timeout)
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		remaining := time.Until(deadline)

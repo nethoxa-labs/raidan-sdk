@@ -118,7 +118,7 @@ func (p *Publisher) Publish(topicName string, data []byte, opts Options) error {
 	if opts.After == 0 {
 		opts.After = 300 * time.Millisecond
 	}
-	publishCtx, cancel := context.WithTimeout(p.ctx, session.Timeout(p.ctx, opts.Timeout))
+	publishCtx, cancel := context.WithTimeout(p.ctx, session.Remaining(p.ctx, opts.Timeout))
 	defer cancel()
 
 	joined, err := p.join(topicName)
@@ -162,7 +162,7 @@ func (p *Publisher) Await(topicName string, timeout time.Duration) ([]byte, erro
 	if timeout <= 0 {
 		timeout = 8 * time.Second
 	}
-	awaitCtx, cancel := context.WithTimeout(p.ctx, session.Timeout(p.ctx, timeout))
+	awaitCtx, cancel := context.WithTimeout(p.ctx, session.Remaining(p.ctx, timeout))
 	defer cancel()
 	for {
 		message, err := joined.subscription.Next(awaitCtx)
@@ -213,7 +213,7 @@ func Publish(ctx context.Context, beaconURL, p2pAddr, topic string, data []byte,
 	if opts.After == 0 {
 		opts.After = 300 * time.Millisecond
 	}
-	publishCtx, cancel := context.WithTimeout(ctx, session.Timeout(ctx, opts.Timeout))
+	publishCtx, cancel := context.WithTimeout(ctx, session.Remaining(ctx, opts.Timeout))
 	defer cancel()
 
 	s, err := reqresp.NewSession(publishCtx, beaconURL, p2pAddr)
@@ -242,7 +242,7 @@ func waitForGossipPeer(ctx context.Context, topic *pubsub.Topic, topicName strin
 	if wait <= 0 {
 		wait = 4 * time.Second
 	}
-	wait = session.Timeout(ctx, wait)
+	wait = session.Remaining(ctx, wait)
 	deadline := time.Now().Add(wait)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()

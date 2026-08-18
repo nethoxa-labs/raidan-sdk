@@ -10,12 +10,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
-const discoveryTimeout = 15 * time.Second
-
-var discoveryHTTPClient = &http.Client{Timeout: discoveryTimeout}
+var discoveryHTTPClient = &http.Client{}
 
 // Target describes one reachable Ethereum network. ExecutionURL is required;
 // missing peer endpoints can be discovered from the HTTP APIs.

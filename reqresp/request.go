@@ -76,7 +76,7 @@ func (s *Session) request(proto string, payload []byte, options RequestOptions, 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	timeout := session.Timeout(ctx, options.Timeout)
+	timeout := session.Remaining(ctx, options.Timeout)
 	requestCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 

@@ -33,22 +33,3 @@ func Remaining(ctx context.Context, fallback time.Duration) time.Duration {
 	}
 	return remaining
 }
-
-// Timeout caps a local operation at both fallback and the deadline on ctx.
-func Timeout(ctx context.Context, fallback time.Duration) time.Duration {
-	if ctx == nil {
-		return fallback
-	}
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		return fallback
-	}
-	remaining := time.Until(deadline)
-	if remaining <= 0 {
-		return 0
-	}
-	if remaining < fallback {
-		return remaining
-	}
-	return fallback
-}

@@ -40,7 +40,7 @@ func (c *PreStatusConn) ExchangeStatus(timeout time.Duration) error {
 	if err := c.SendETHRaw(EthStatus, payload); err != nil {
 		return fmt.Errorf("write status: %w", err)
 	}
-	if err := c.fd.SetReadDeadline(time.Now().Add(session.Timeout(c.ctx, timeout))); err != nil {
+	if err := c.fd.SetReadDeadline(time.Now().Add(session.Remaining(c.ctx, timeout))); err != nil {
 		return fmt.Errorf("set status deadline: %w", err)
 	}
 	defer func() { _ = c.fd.SetReadDeadline(time.Time{}) }()
@@ -153,7 +153,7 @@ func retryForkID(remote forkid.ID, err error) (forkid.ID, error) {
 }
 
 func waitStatusOutcome(ctx context.Context, conn WireReadWriter, fd ReadDeadlineSetter, timeout time.Duration) (closed bool, reason string) {
-	if err := fd.SetReadDeadline(time.Now().Add(session.Timeout(ctx, timeout))); err != nil {
+	if err := fd.SetReadDeadline(time.Now().Add(session.Remaining(ctx, timeout))); err != nil {
 		return false, ""
 	}
 	defer func() { _ = fd.SetReadDeadline(time.Time{}) }()

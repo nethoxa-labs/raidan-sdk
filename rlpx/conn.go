@@ -76,13 +76,13 @@ func dial(ctx context.Context, target string, key *ecdsa.PrivateKey) (*Conn, net
 		return nil, nil, fmt.Errorf("parse enode: %w", err)
 	}
 	addr := net.JoinHostPort(node.IP().String(), fmt.Sprintf("%d", node.TCP()))
-	dialCtx, cancel := context.WithTimeout(ctx, session.Timeout(ctx, 5*time.Second))
+	dialCtx, cancel := context.WithTimeout(ctx, session.Remaining(ctx, 5*time.Second))
 	defer cancel()
 	fd, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", addr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("dial: %w", err)
 	}
-	if err := fd.SetDeadline(time.Now().Add(session.Timeout(ctx, 10*time.Second))); err != nil {
+	if err := fd.SetDeadline(time.Now().Add(session.Remaining(ctx, 10*time.Second))); err != nil {
 		_ = fd.Close()
 		return nil, nil, fmt.Errorf("set handshake deadline: %w", err)
 	}
@@ -141,7 +141,7 @@ type readDeadlineSetter interface {
 }
 
 func waitCloseReason(ctx context.Context, rc messageReader, fd readDeadlineSetter, timeout time.Duration) (bool, string) {
-	if err := fd.SetReadDeadline(time.Now().Add(session.Timeout(ctx, timeout))); err != nil {
+	if err := fd.SetReadDeadline(time.Now().Add(session.Remaining(ctx, timeout))); err != nil {
 		return false, ""
 	}
 	defer func() { _ = fd.SetReadDeadline(time.Time{}) }()

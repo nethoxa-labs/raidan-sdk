@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // ConsensusENR reads the discovery ENR from the standard beacon identity API.
@@ -15,9 +14,7 @@ func ConsensusENR(ctx context.Context, beaconURL string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	requestCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, strings.TrimRight(beaconURL, "/")+"/eth/v1/node/identity", nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(beaconURL, "/")+"/eth/v1/node/identity", nil)
 	if err != nil {
 		return "", err
 	}

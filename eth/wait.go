@@ -13,7 +13,7 @@ import (
 // pings. It supports caller-controlled status exchanges that cannot use
 // PreStatusConn.ExchangeStatus.
 func WaitStatus(ctx context.Context, conn WireReadWriter, fd ReadDeadlineSetter, timeout time.Duration) error {
-	if err := fd.SetReadDeadline(time.Now().Add(session.Timeout(ctx, timeout))); err != nil {
+	if err := fd.SetReadDeadline(time.Now().Add(session.Remaining(ctx, timeout))); err != nil {
 		return fmt.Errorf("set status deadline: %w", err)
 	}
 	defer func() { _ = fd.SetReadDeadline(time.Time{}) }()
@@ -46,7 +46,7 @@ func WaitClose(ctx context.Context, conn WireReadWriter, fd ReadDeadlineSetter, 
 
 // WaitCloseReason is WaitClose plus the decoded Disconnect reason, when sent.
 func WaitCloseReason(ctx context.Context, conn WireReadWriter, fd ReadDeadlineSetter, timeout time.Duration) (bool, string) {
-	if err := fd.SetReadDeadline(time.Now().Add(session.Timeout(ctx, timeout))); err != nil {
+	if err := fd.SetReadDeadline(time.Now().Add(session.Remaining(ctx, timeout))); err != nil {
 		return false, ""
 	}
 	defer func() { _ = fd.SetReadDeadline(time.Time{}) }()

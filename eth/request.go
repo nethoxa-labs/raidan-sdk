@@ -51,7 +51,7 @@ func waitForWireRequestID(ctx context.Context, conn WireReadWriter, fd ReadDeadl
 	if timeout <= 0 {
 		timeout = solicitedResponseWait
 	}
-	if err := fd.SetReadDeadline(time.Now().Add(session.Timeout(ctx, timeout))); err != nil {
+	if err := fd.SetReadDeadline(time.Now().Add(session.Remaining(ctx, timeout))); err != nil {
 		return 0, nil, fmt.Errorf("set %s deadline: %w", label, err)
 	}
 	defer func() { _ = fd.SetReadDeadline(time.Time{}) }()

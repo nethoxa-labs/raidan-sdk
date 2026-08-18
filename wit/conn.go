@@ -96,7 +96,7 @@ func (c *Conn) ReadRaw(timeout time.Duration) (uint64, []byte, error) {
 		timeout = 10 * time.Second
 	}
 	rlpxConn := c.preStatus.RLPx()
-	if err := rlpxConn.SetReadDeadline(time.Now().Add(session.Timeout(c.ctx, timeout))); err != nil {
+	if err := rlpxConn.SetReadDeadline(time.Now().Add(session.Remaining(c.ctx, timeout))); err != nil {
 		return 0, nil, fmt.Errorf("set WIT read deadline: %w", err)
 	}
 	defer func() { _ = rlpxConn.SetReadDeadline(time.Time{}) }()
