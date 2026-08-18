@@ -6,6 +6,17 @@ import (
 	"time"
 )
 
+// UnsupportedCapabilityError reports a peer that cannot run the requested
+// ETH protocol version. The caller can classify this result as not applicable.
+type UnsupportedCapabilityError struct {
+	Negotiated uint
+	Required   uint
+}
+
+func (e *UnsupportedCapabilityError) Error() string {
+	return fmt.Sprintf("peer negotiated eth/%d (need eth/%d)", e.Negotiated, e.Required)
+}
+
 // DialReady negotiates an ETH capability and completes the canonical Status
 // exchange. The returned connection is ready for protocol requests.
 func DialReady(ctx context.Context, target, rpc string, want uint) (*PreStatusConn, error) {
@@ -19,7 +30,7 @@ func DialReady(ctx context.Context, target, rpc string, want uint) (*PreStatusCo
 	if conn.ETHVersion() < want {
 		got := conn.ETHVersion()
 		conn.Close()
-		return nil, fmt.Errorf("peer negotiated eth/%d (need eth/%d)", got, want)
+		return nil, &UnsupportedCapabilityError{Negotiated: got, Required: want}
 	}
 	if err := conn.ExchangeStatus(10 * time.Second); err != nil {
 		conn.Close()
