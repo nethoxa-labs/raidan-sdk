@@ -35,7 +35,7 @@ func Dial(ctx context.Context, target, rpc string) (*Conn, error) {
 }
 
 // DialWithKey negotiates WIT/1 with an explicit local identity.
-// Multi-identity probes must opt in through this path.
+// Multi-identity cases must opt in through this path.
 func DialWithKey(ctx context.Context, target, rpc string, key *ecdsa.PrivateKey) (*Conn, error) {
 	if key == nil {
 		return nil, errors.New("WIT local identity is nil")

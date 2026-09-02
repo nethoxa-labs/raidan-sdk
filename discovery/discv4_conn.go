@@ -88,7 +88,7 @@ func DialDiscv4(ctx context.Context, target string) (*Discv4Conn, error) {
 }
 
 // DialDiscv4WithKey opens a UDP socket with the supplied local discovery
-// identity. Multi-identity probes must opt in explicitly through this path.
+// identity. Multi-identity cases must opt in explicitly through this path.
 func DialDiscv4WithKey(ctx context.Context, target string, key *ecdsa.PrivateKey) (*Discv4Conn, error) {
 	if key == nil {
 		return nil, errors.New("discv4 local key is nil")

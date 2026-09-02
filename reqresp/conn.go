@@ -48,7 +48,7 @@ func NewSession(ctx context.Context, beaconURL, p2pAddr string) (*Session, error
 }
 
 // NewSessionWithIdentity connects a transient libp2p host using an explicit
-// local identity. Multi-identity probes must opt in explicitly through this
+// local identity. Multi-identity cases must opt in explicitly through this
 // path.
 func NewSessionWithIdentity(ctx context.Context, beaconURL, p2pAddr string, identity libp2pcrypto.PrivKey) (*Session, error) {
 	if identity == nil {

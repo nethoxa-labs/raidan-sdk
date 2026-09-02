@@ -35,7 +35,7 @@ func DialDiscv5(ctx context.Context, target string) (*Discv5Conn, error) {
 }
 
 // DialDiscv5WithKey opens a UDP socket with the supplied local static
-// identity. Multi-identity probes must opt in explicitly through this path.
+// identity. Multi-identity cases must opt in explicitly through this path.
 func DialDiscv5WithKey(ctx context.Context, target string, priv *ecdsa.PrivateKey) (*Discv5Conn, error) {
 	if priv == nil {
 		return nil, errors.New("discv5 local key is nil")

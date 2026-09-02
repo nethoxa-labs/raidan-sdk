@@ -95,7 +95,7 @@ func DialPreStatus(ctx context.Context, target, rpcURL string, config Config) (*
 }
 
 // DialPreStatusWithKey performs TCP, RLPx, and Hello negotiation with an
-// explicit local identity. Multi-identity probes must opt in through this
+// explicit local identity. Multi-identity cases must opt in through this
 // path.
 func DialPreStatusWithKey(ctx context.Context, target, rpcURL string, config Config, key *ecdsa.PrivateKey) (*PreStatusConn, error) {
 	if key == nil {
@@ -276,7 +276,7 @@ func Dial(ctx context.Context, target, rpc string, config Config) (*Conn, error)
 }
 
 // DialWithKey performs RLPx, Hello, and Status with an explicit local
-// identity. Multi-identity probes must opt in through this path.
+// identity. Multi-identity cases must opt in through this path.
 func DialWithKey(ctx context.Context, target, rpc string, config Config, key *ecdsa.PrivateKey) (*Conn, error) {
 	if key == nil {
 		return nil, errors.New("ETH local identity is nil")
