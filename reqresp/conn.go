@@ -40,7 +40,7 @@ func NewSession(ctx context.Context, beaconURL, p2pAddr string) (*Session, error
 	if err != nil {
 		return nil, fmt.Errorf("load Raidan participant key: %w", err)
 	}
-	identity, err := participant.CLKey()
+	identity, err := CLKey(participant)
 	if err != nil {
 		return nil, fmt.Errorf("load Raidan participant key: %w", err)
 	}

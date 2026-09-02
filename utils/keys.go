@@ -8,8 +8,6 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/crypto"
-	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 const deterministicSeed = "raidan-sdk-deterministic-key-v1"
@@ -55,15 +53,6 @@ func (identity *ParticipantIdentity) ELKey() (*ecdsa.PrivateKey, error) {
 	return key, nil
 }
 
-// CLKey returns the identity in libp2p's secp256k1 representation.
-func (identity *ParticipantIdentity) CLKey() (libp2pcrypto.PrivKey, error) {
-	key, err := identity.ELKey()
-	if err != nil {
-		return nil, err
-	}
-	return libp2pcrypto.UnmarshalSecp256k1PrivateKey(crypto.FromECDSA(key))
-}
-
 // ELPeerIdentities returns the exact discovery node ID and RLPx public key.
 func (identity *ParticipantIdentity) ELPeerIdentities() ([]string, error) {
 	key, err := identity.ELKey()
@@ -73,24 +62,6 @@ func (identity *ParticipantIdentity) ELPeerIdentities() ([]string, error) {
 	nodeID := fmt.Sprintf("%x", crypto.Keccak256(crypto.FromECDSAPub(&key.PublicKey)[1:]))
 	publicKey := fmt.Sprintf("%x", crypto.FromECDSAPub(&key.PublicKey)[1:])
 	return []string{nodeID, publicKey}, nil
-}
-
-// CLPeerIdentities returns the exact libp2p peer ID and discv5 node ID.
-func (identity *ParticipantIdentity) CLPeerIdentities() ([]string, error) {
-	key, err := identity.CLKey()
-	if err != nil {
-		return nil, err
-	}
-	id, err := peer.IDFromPrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("derive participant peer ID: %w", err)
-	}
-	secp256k1Key, err := identity.ELKey()
-	if err != nil {
-		return nil, err
-	}
-	nodeID := fmt.Sprintf("%x", crypto.Keccak256(crypto.FromECDSAPub(&secp256k1Key.PublicKey)[1:]))
-	return []string{id.String(), nodeID}, nil
 }
 
 // DeterministicKey derives the same secp256k1 key for the same label. It is

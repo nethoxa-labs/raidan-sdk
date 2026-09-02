@@ -86,6 +86,7 @@ reqresp/executionpayloadenvelopesbyrange.go
 reqresp/executionpayloadenvelopesbyroot.go
 reqresp/framing.go
 reqresp/goodbye.go
+reqresp/identity.go
 reqresp/inbound.go
 reqresp/lightclientbootstrap.go
 reqresp/lightclientfinalityupdate.go
