@@ -1,7 +1,7 @@
 # Repository instructions
 
-Read `/Users/nethoxa/Desktop/AGENTS.md`, `/Users/nethoxa/Desktop/ARCHITECTURE.md`,
-and each applicable contract in `/Users/nethoxa/Desktop/internal/specifications/`
+Read `../AGENTS.md`, `../ARCHITECTURE.md`,
+and each applicable contract in `../internal/specifications/`
 before you make changes.
 
 This repository owns the stable reusable Ethereum protocol, session, target,
