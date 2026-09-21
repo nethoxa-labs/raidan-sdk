@@ -117,7 +117,10 @@ func BeaconStatus(ctx context.Context, beaconURL string) ([]byte, []byte, error)
 		return nil, nil, fmt.Errorf("finalized epoch: %w", err)
 	}
 
-	forkDigest := consensusForkDigest(currentVersion, genesisRoot)
+	forkDigest, err := consensusForkDigest(ctx, beaconURL, currentVersion, genesisRoot, headSlot)
+	if err != nil {
+		return nil, nil, err
+	}
 	v1 := make([]byte, 84)
 	copy(v1[0:4], forkDigest[:])
 	copy(v1[4:36], finalizedRoot)
@@ -129,12 +132,133 @@ func BeaconStatus(ctx context.Context, beaconURL string) ([]byte, []byte, error)
 	return v1, v2, nil
 }
 
-func consensusForkDigest(currentVersion, genesisValidatorsRoot []byte) [4]byte {
+// consensusForkDigest returns the 4-byte fork digest the network uses at the
+// epoch containing headSlot.
+//
+// Before Fulu the digest is the first four bytes of the ForkData root. Fulu's
+// EIP-7892 blob-parameter-only forks change the digest without changing the
+// fork version, so from FULU_FORK_EPOCH onwards the ForkData root is masked
+// with the hash of the active blob parameters. A peer that keeps using the
+// unmasked digest presents an unknown fork to every Fulu client and its Status
+// handshake and gossip topics are rejected.
+func consensusForkDigest(
+	ctx context.Context,
+	beaconURL string,
+	currentVersion, genesisValidatorsRoot []byte,
+	headSlot uint64,
+) ([4]byte, error) {
 	var versionChunk, rootChunk [32]byte
 	copy(versionChunk[:], currentVersion)
 	copy(rootChunk[:], genesisValidatorsRoot)
-	root := sha256.Sum256(append(versionChunk[:], rootChunk[:]...))
-	return [4]byte(root[:4])
+	base := sha256.Sum256(append(versionChunk[:], rootChunk[:]...))
+
+	config, err := consensusConfig(ctx, beaconURL)
+	if err != nil {
+		// An endpoint without a config spec cannot be a Fulu network this SDK
+		// can describe; keep the pre-Fulu digest rather than failing the case.
+		return [4]byte(base[:4]), nil
+	}
+	fuluEpoch, ok := config.uint("FULU_FORK_EPOCH")
+	if !ok {
+		return [4]byte(base[:4]), nil
+	}
+	slotsPerEpoch, ok := config.uint("SLOTS_PER_EPOCH")
+	if !ok || slotsPerEpoch == 0 {
+		return [4]byte{}, fmt.Errorf("config spec has no usable SLOTS_PER_EPOCH")
+	}
+	epoch := headSlot / slotsPerEpoch
+	if epoch < fuluEpoch {
+		return [4]byte(base[:4]), nil
+	}
+
+	blobEpoch, maxBlobs := config.blobParameters(epoch)
+	var mask [16]byte
+	binary.LittleEndian.PutUint64(mask[0:8], blobEpoch)
+	binary.LittleEndian.PutUint64(mask[8:16], maxBlobs)
+	masked := sha256.Sum256(mask[:])
+	var digest [4]byte
+	for index := range digest {
+		digest[index] = base[index] ^ masked[index]
+	}
+	return digest, nil
+}
+
+// consensusSpec is the subset of /eth/v1/config/spec this SDK needs. Every
+// scalar arrives as a decimal string.
+type consensusSpec struct {
+	values   map[string]string
+	schedule []blobScheduleEntry
+}
+
+type blobScheduleEntry struct {
+	Epoch    uint64
+	MaxBlobs uint64
+}
+
+func (c consensusSpec) uint(key string) (uint64, bool) {
+	raw, ok := c.values[key]
+	if !ok {
+		return 0, false
+	}
+	value, err := strconv.ParseUint(strings.TrimSpace(raw), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return value, true
+}
+
+// blobParameters mirrors get_blob_parameters: the newest BLOB_SCHEDULE entry at
+// or below epoch, falling back to the Electra defaults.
+func (c consensusSpec) blobParameters(epoch uint64) (uint64, uint64) {
+	best := blobScheduleEntry{}
+	found := false
+	for _, entry := range c.schedule {
+		if entry.Epoch <= epoch && (!found || entry.Epoch > best.Epoch) {
+			best, found = entry, true
+		}
+	}
+	if found {
+		return best.Epoch, best.MaxBlobs
+	}
+	electraEpoch, _ := c.uint("ELECTRA_FORK_EPOCH")
+	maxBlobs, _ := c.uint("MAX_BLOBS_PER_BLOCK_ELECTRA")
+	return electraEpoch, maxBlobs
+}
+
+func consensusConfig(ctx context.Context, beaconURL string) (consensusSpec, error) {
+	var payload struct {
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	if err := consensusGetJSON(ctx, beaconURL, "/eth/v1/config/spec", &payload); err != nil {
+		return consensusSpec{}, err
+	}
+	spec := consensusSpec{values: make(map[string]string, len(payload.Data))}
+	for key, raw := range payload.Data {
+		var text string
+		if err := json.Unmarshal(raw, &text); err == nil {
+			spec.values[key] = text
+			continue
+		}
+		if key != "BLOB_SCHEDULE" {
+			continue
+		}
+		var entries []struct {
+			Epoch    string `json:"EPOCH"`
+			MaxBlobs string `json:"MAX_BLOBS_PER_BLOCK"`
+		}
+		if err := json.Unmarshal(raw, &entries); err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			epoch, epochErr := strconv.ParseUint(strings.TrimSpace(entry.Epoch), 10, 64)
+			maxBlobs, blobErr := strconv.ParseUint(strings.TrimSpace(entry.MaxBlobs), 10, 64)
+			if epochErr != nil || blobErr != nil {
+				continue
+			}
+			spec.schedule = append(spec.schedule, blobScheduleEntry{Epoch: epoch, MaxBlobs: maxBlobs})
+		}
+	}
+	return spec, nil
 }
 
 func consensusGetJSON(ctx context.Context, baseURL, path string, output any) error {
