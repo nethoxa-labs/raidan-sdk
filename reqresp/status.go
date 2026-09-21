@@ -26,22 +26,30 @@ const (
 )
 
 // StatusWarmup completes a Status v2 handshake, falling back to Status v1.
+//
+// Fulu clients drop Status v1, so the fallback usually fails with "protocol not
+// supported" or with a closed connection. That message hides why v2 failed, so
+// both attempts are reported when neither succeeds.
 func (s *Session) StatusWarmup(beaconURL string) error {
 	statusV1, statusV2, err := BeaconStatus(s.ctx, beaconURL)
 	if err != nil {
 		return err
 	}
-	if response, err := s.Request(StatusV2, statusV2, RequestOptions{}); err == nil && response.Code == CodeSuccess {
+	responseV2, errV2 := s.Request(StatusV2, statusV2, RequestOptions{})
+	if errV2 == nil && responseV2.Code == CodeSuccess {
 		return nil
 	}
-	response, err := s.Request(StatusV1, statusV1, RequestOptions{})
-	if err != nil {
-		return err
+	if errV2 == nil {
+		errV2 = fmt.Errorf("response code %d", responseV2.Code)
 	}
-	if response.Code != CodeSuccess {
-		return fmt.Errorf("status warmup returned response code %d", response.Code)
+	responseV1, errV1 := s.Request(StatusV1, statusV1, RequestOptions{})
+	if errV1 == nil && responseV1.Code == CodeSuccess {
+		return nil
 	}
-	return nil
+	if errV1 == nil {
+		errV1 = fmt.Errorf("response code %d", responseV1.Code)
+	}
+	return fmt.Errorf("status warmup failed: v2: %w; v1: %v", errV2, errV1)
 }
 
 // BeaconStatus builds the canonical Status v1 and v2 request bodies.
