@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	libp2p "github.com/libp2p/go-libp2p"
 	mplex "github.com/libp2p/go-libp2p-mplex"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -24,17 +25,26 @@ import (
 const (
 	consensusDialTimeout     = 10 * time.Second
 	consensusRequestAttempts = 3
+
+	// gossipMaxMessageSize leaves bounded room for the pubsub RPC envelope
+	// around a 10 MiB gossip payload. WithMaxMessageSize applies to the
+	// encoded RPC, not only Message.Data.
+	gossipMaxMessageSize = 10*1024*1024 + 64*1024
 )
 
 // Session is one connected consensus request/response peer.
 type Session struct {
 	ctx    context.Context
+	stop   context.CancelFunc
 	host   host.Host
+	pubsub *pubsub.PubSub
 	peerID peer.ID
 	addrs  []ma.Multiaddr
 }
 
 // NewSession connects a transient libp2p host using the current case identity.
+// The host runs a gossipsub router, so Identify lists the gossipsub protocols.
+// Consensus clients such as Lighthouse disconnect a peer that does not list them.
 func NewSession(ctx context.Context, beaconURL, p2pAddr string) (*Session, error) {
 	participant, err := session.ParticipantIdentity(ctx)
 	if err != nil {
@@ -49,7 +59,7 @@ func NewSession(ctx context.Context, beaconURL, p2pAddr string) (*Session, error
 
 // NewSessionWithIdentity connects a transient libp2p host using an explicit
 // local identity. Multi-identity cases must opt in explicitly through this
-// path.
+// path. The host runs a gossipsub router, as NewSession does.
 func NewSessionWithIdentity(ctx context.Context, beaconURL, p2pAddr string, identity libp2pcrypto.PrivKey) (*Session, error) {
 	if identity == nil {
 		return nil, errors.New("consensus local identity is nil")
@@ -85,20 +95,45 @@ func NewSessionWithIdentity(ctx context.Context, beaconURL, p2pAddr string, iden
 	if err != nil {
 		return nil, fmt.Errorf("new libp2p host: %w", err)
 	}
+	routerCtx, stop := context.WithCancel(ctx)
+	ps, err := pubsub.NewGossipSub(
+		routerCtx,
+		h,
+		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
+		pubsub.WithNoAuthor(),
+		pubsub.WithMaxMessageSize(gossipMaxMessageSize),
+	)
+	if err != nil {
+		stop()
+		_ = h.Close()
+		return nil, fmt.Errorf("new gossipsub router: %w", err)
+	}
 	h.Peerstore().AddAddrs(info.ID, info.Addrs, peerstore.TempAddrTTL)
 	if err := h.Connect(dialCtx, *info); err != nil {
+		stop()
 		_ = h.Close()
 		return nil, fmt.Errorf("connect consensus peer: %w", err)
 	}
-	return &Session{ctx: ctx, host: h, peerID: info.ID, addrs: explicitAddrs}, nil
+	return &Session{ctx: ctx, stop: stop, host: h, pubsub: ps, peerID: info.ID, addrs: explicitAddrs}, nil
 }
 
-// Close releases the libp2p host and all of its streams.
+// Close stops the gossipsub router and releases the libp2p host and all of its
+// streams.
 func (s *Session) Close() error {
 	if s == nil || s.host == nil {
 		return nil
 	}
+	s.stop()
 	return s.host.Close()
+}
+
+// PubSub returns the gossipsub router that runs on the session host. The
+// session owns it. A host can run one router only.
+func (s *Session) PubSub() *pubsub.PubSub {
+	if s == nil {
+		return nil
+	}
+	return s.pubsub
 }
 
 // Host returns the connected libp2p host for protocols such as gossipsub that

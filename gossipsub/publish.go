@@ -8,7 +8,7 @@ import (
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/nethoxa-labs/raidan-sdk/reqresp"
 	"github.com/nethoxa-labs/raidan-sdk/session"
@@ -16,11 +16,6 @@ import (
 
 // MaxPayloadSize is the consensus gossip decoded-payload ceiling.
 const MaxPayloadSize = 10 * 1024 * 1024
-
-// maxWireMessageSize leaves bounded room for the pubsub RPC envelope around a
-// maximum-size application payload. WithMaxMessageSize applies to the encoded
-// RPC, not only Message.Data.
-const maxWireMessageSize = MaxPayloadSize + 64*1024
 
 // ErrNoPeers reports that no target peer subscribed to the requested topic.
 var ErrNoPeers = errors.New("no gossipsub peers for topic")
@@ -41,11 +36,11 @@ type joinedTopic struct {
 	subscription *pubsub.Subscription
 }
 
-// Publisher keeps one gossipsub router and its joined topics on an existing
-// libp2p host. It does not own or close the host.
+// Publisher keeps the joined topics of one req/resp session. It uses the
+// gossipsub router of the session. It does not own or close the session.
 type Publisher struct {
 	ctx    context.Context
-	host   host.Host
+	self   peer.ID
 	pubsub *pubsub.PubSub
 
 	mu     sync.Mutex
@@ -53,29 +48,19 @@ type Publisher struct {
 	closed bool
 }
 
-// NewPublisher starts a persistent gossipsub router on an already connected
-// consensus host.
-func NewPublisher(ctx context.Context, h host.Host) (*Publisher, error) {
+// NewPublisher joins topics on the gossipsub router of a connected consensus
+// session. A host can run one router only, so the session owns it.
+func NewPublisher(ctx context.Context, s *reqresp.Session) (*Publisher, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if h == nil {
-		return nil, errors.New("nil gossipsub host")
-	}
-	ps, err := pubsub.NewGossipSub(
-		ctx,
-		h,
-		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
-		pubsub.WithNoAuthor(),
-		pubsub.WithMaxMessageSize(maxWireMessageSize),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new gossipsub: %w", err)
+	if s == nil || s.PubSub() == nil {
+		return nil, errors.New("nil gossipsub session")
 	}
 	return &Publisher{
 		ctx:    ctx,
-		host:   h,
-		pubsub: ps,
+		self:   s.Host().ID(),
+		pubsub: s.PubSub(),
 		topics: make(map[string]*joinedTopic),
 	}, nil
 }
@@ -169,7 +154,7 @@ func (p *Publisher) Await(topicName string, timeout time.Duration) ([]byte, erro
 		if err != nil {
 			return nil, err
 		}
-		if message.ReceivedFrom == p.host.ID() {
+		if message.ReceivedFrom == p.self {
 			continue
 		}
 		return append([]byte(nil), message.Data...), nil
@@ -226,7 +211,7 @@ func Publish(ctx context.Context, beaconURL, p2pAddr, topic string, data []byte,
 			return fmt.Errorf("status warmup: %w", err)
 		}
 	}
-	publisher, err := NewPublisher(publishCtx, s.Host())
+	publisher, err := NewPublisher(publishCtx, s)
 	if err != nil {
 		return err
 	}
