@@ -8,6 +8,7 @@ Neutral Go primitives for portable Ethereum protocol test cases.
 | `discovery` | ENR, enode, DNS discovery, discv4, and discv5 |
 | `eth` | ETH protocol messages, negotiation, and request matching |
 | `gossipsub` | Consensus gossip topics and publishing |
+| `mplex` | Explicit mplex transport with caller-owned frames |
 | `reqresp` | Consensus request/response protocols and SSZ-snappy framing |
 | `result` | Structured verdicts |
 | `rlpx` | RLPx authentication, framing, and base messages |

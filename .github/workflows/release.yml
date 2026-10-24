@@ -33,7 +33,7 @@ jobs:
           test ! -d sdk -a ! -d fixtures -a ! -d consensus
           test "$(go list -m)" = "github.com/nethoxa-labs/raidan-sdk"
           test "$(sed -n 's/^const Version = "\([^"]*\)"$/\1/p' sdk.go)" = "$GITHUB_REF_NAME"
-          for package in discovery eth gossipsub reqresp result rlpx rpc session snap target utils wit; do
+          for package in discovery eth gossipsub mplex reqresp result rlpx rpc session snap target utils wit; do
             test -f "$package/doc.go"
           done
           for proxy in common crypto ecies enode ethwire forkid gethrlpx p2p rlp snappy types; do

@@ -72,6 +72,8 @@ gossipsub/publish.go
 gossipsub/rpc.go
 gossipsub/rpc_builder.go
 gossipsub/topic.go
+mplex/doc.go
+mplex/mplex.go
 reqresp/blobsidecarsbyrange.go
 reqresp/blobsidecarsbyroot.go
 reqresp/blocksbyrange.go
