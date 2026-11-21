@@ -1,0 +1,66 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: sdk-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Verify module
+        run: |
+          test "$(go list -m)" = "github.com/nethoxa-labs/raidan-sdk"
+          test "$(sed -n 's/^const Version = "\([^"]*\)"$/\1/p' sdk.go)" = "$GITHUB_REF_NAME"
+          for package in discovery eth gossipsub mplex reqresp result rlpx rpc session snap target utils wit; do
+            test -f "$package/doc.go"
+          done
+          test -z "$(gofmt -l .)"
+          go mod tidy -diff
+          CGO_ENABLED=0 go vet ./...
+          CGO_ENABLED=0 go build ./...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+  release:
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Validate module release tag
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          test "$(go list -m)" = "github.com/nethoxa-labs/raidan-sdk"
+          test "$(sed -n 's/^const Version = "\([^"]*\)"$/\1/p' sdk.go)" = "$GITHUB_REF_NAME"
+      - name: Publish module release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release $GITHUB_REF_NAME already exists; refusing to republish an immutable version" >&2
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes

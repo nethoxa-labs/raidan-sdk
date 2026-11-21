@@ -1,0 +1,250 @@
+package reqresp
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"strings"
+	"time"
+
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	libp2p "github.com/libp2p/go-libp2p"
+	mplex "github.com/libp2p/go-libp2p-mplex"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
+	ma "github.com/multiformats/go-multiaddr"
+
+	"github.com/nethoxa-labs/raidan-sdk/session"
+)
+
+const (
+	consensusDialTimeout     = 10 * time.Second
+	consensusRequestAttempts = 3
+
+	// gossipMaxMessageSize leaves bounded room for the pubsub RPC envelope
+	// around a 10 MiB gossip payload. WithMaxMessageSize applies to the
+	// encoded RPC, not only Message.Data.
+	gossipMaxMessageSize = 10*1024*1024 + 64*1024
+)
+
+// Session is one connected consensus request/response peer.
+type Session struct {
+	ctx    context.Context
+	stop   context.CancelFunc
+	host   host.Host
+	pubsub *pubsub.PubSub
+	peerID peer.ID
+	addrs  []ma.Multiaddr
+}
+
+// NewSession connects a transient libp2p host using the configured local identity.
+// The host runs a gossipsub router, so Identify lists the gossipsub protocols.
+// Some consensus clients disconnect a peer that does not list them.
+func NewSession(ctx context.Context, beaconURL, p2pAddr string) (*Session, error) {
+	participant, err := session.ParticipantIdentity(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load local identity key: %w", err)
+	}
+	identity, err := CLKey(participant)
+	if err != nil {
+		return nil, fmt.Errorf("load local identity key: %w", err)
+	}
+	return NewSessionWithIdentity(ctx, beaconURL, p2pAddr, identity)
+}
+
+// NewSessionWithIdentity connects a transient libp2p host using an explicit
+// local identity. The host runs a gossipsub router, as NewSession does.
+func NewSessionWithIdentity(ctx context.Context, beaconURL, p2pAddr string, identity libp2pcrypto.PrivKey) (*Session, error) {
+	if identity == nil {
+		return nil, errors.New("consensus local identity is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, session.Remaining(ctx, consensusDialTimeout))
+	defer cancel()
+
+	peerID, err := PeerID(ctx, beaconURL, p2pAddr)
+	if err != nil {
+		return nil, err
+	}
+	addr, err := Multiaddr(p2pAddr, peerID)
+	if err != nil {
+		return nil, err
+	}
+	info, err := peer.AddrInfoFromP2pAddr(addr)
+	if err != nil {
+		return nil, fmt.Errorf("parse peer multiaddr: %w", err)
+	}
+	explicitAddrs := append([]ma.Multiaddr(nil), info.Addrs...)
+	h, err := libp2p.New(
+		libp2p.NoTransports,
+		libp2p.Transport(tcp.NewTCPTransport),
+		libp2p.NoListenAddrs,
+		libp2p.DefaultMuxers,
+		libp2p.Muxer(mplex.ID, mplex.DefaultTransport),
+		libp2p.Identity(identity),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new libp2p host: %w", err)
+	}
+	routerCtx, stop := context.WithCancel(ctx)
+	ps, err := pubsub.NewGossipSub(
+		routerCtx,
+		h,
+		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
+		pubsub.WithNoAuthor(),
+		pubsub.WithMaxMessageSize(gossipMaxMessageSize),
+	)
+	if err != nil {
+		stop()
+		_ = h.Close()
+		return nil, fmt.Errorf("new gossipsub router: %w", err)
+	}
+	h.Peerstore().AddAddrs(info.ID, info.Addrs, peerstore.TempAddrTTL)
+	if err := h.Connect(dialCtx, *info); err != nil {
+		stop()
+		_ = h.Close()
+		return nil, fmt.Errorf("connect consensus peer: %w", err)
+	}
+	return &Session{ctx: ctx, stop: stop, host: h, pubsub: ps, peerID: info.ID, addrs: explicitAddrs}, nil
+}
+
+// Close stops the gossipsub router and releases the libp2p host and all of its
+// streams.
+func (s *Session) Close() error {
+	if s == nil || s.host == nil {
+		return nil
+	}
+	s.stop()
+	return s.host.Close()
+}
+
+// PubSub returns the gossipsub router that runs on the session host. The
+// session owns it. A host can run one router only.
+func (s *Session) PubSub() *pubsub.PubSub {
+	if s == nil {
+		return nil
+	}
+	return s.pubsub
+}
+
+// Host returns the connected libp2p host for protocols such as gossipsub that
+// share the same consensus peer transport.
+func (s *Session) Host() host.Host {
+	if s == nil {
+		return nil
+	}
+	return s.host
+}
+
+func (s *Session) pinExplicitAddrs() {
+	if s == nil || s.host == nil || len(s.addrs) == 0 {
+		return
+	}
+	s.host.Peerstore().ClearAddrs(s.peerID)
+	s.host.Peerstore().AddAddrs(s.peerID, s.addrs, peerstore.TempAddrTTL)
+}
+
+func retryableConsensusConnectError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "connect consensus peer") ||
+		strings.Contains(message, "open stream") && strings.Contains(message, "connection failed") ||
+		strings.Contains(message, "failed to dial") ||
+		strings.Contains(message, "failed to negotiate stream multiplexer") ||
+		strings.Contains(message, "failed to negotiate security protocol") ||
+		strings.Contains(message, "use of closed network connection") ||
+		strings.Contains(message, "i/o timeout")
+}
+
+func consensusRetrySleep(ctx context.Context, attempt int) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timer := time.NewTimer(time.Duration(attempt+1) * 500 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// PeerID resolves the peer ID from a full multiaddress or the beacon identity API.
+func PeerID(ctx context.Context, beaconURL, p2pAddr string) (peer.ID, error) {
+	if strings.HasPrefix(p2pAddr, "/") && strings.Contains(p2pAddr, "/p2p/") {
+		addr, err := ma.NewMultiaddr(p2pAddr)
+		if err == nil {
+			info, err := peer.AddrInfoFromP2pAddr(addr)
+			if err == nil {
+				return info.ID, nil
+			}
+		}
+	}
+	var identity struct {
+		Data struct {
+			PeerID string `json:"peer_id"`
+		} `json:"data"`
+	}
+	if err := consensusGetJSON(ctx, beaconURL, "/eth/v1/node/identity", &identity); err != nil {
+		return "", fmt.Errorf("fetch node identity: %w", err)
+	}
+	if identity.Data.PeerID == "" {
+		return "", errors.New("node identity returned empty peer_id")
+	}
+	id, err := peer.Decode(identity.Data.PeerID)
+	if err != nil {
+		return "", fmt.Errorf("decode peer id: %w", err)
+	}
+	return id, nil
+}
+
+// Multiaddr normalizes a libp2p multiaddress or host:port endpoint.
+func Multiaddr(p2pAddr string, peerID peer.ID) (ma.Multiaddr, error) {
+	if strings.HasPrefix(p2pAddr, "enr:") {
+		node, err := enode.Parse(enode.ValidSchemes, p2pAddr)
+		if err != nil {
+			return nil, fmt.Errorf("parse consensus ENR: %w", err)
+		}
+		ip, port := node.IP(), node.TCP()
+		if ip == nil || ip.IsUnspecified() {
+			return nil, errors.New("consensus ENR has no routable IP address")
+		}
+		if port < 1 || port > 65535 {
+			return nil, fmt.Errorf("consensus ENR has invalid TCP port %d", port)
+		}
+		protocol := "ip6"
+		if ip.To4() != nil {
+			protocol = "ip4"
+		}
+		return ma.NewMultiaddr(fmt.Sprintf("/%s/%s/tcp/%d/p2p/%s", protocol, ip.String(), port, peerID))
+	}
+	if strings.HasPrefix(p2pAddr, "/") {
+		if strings.Contains(p2pAddr, "/p2p/") {
+			return ma.NewMultiaddr(p2pAddr)
+		}
+		return ma.NewMultiaddr(p2pAddr + "/p2p/" + peerID.String())
+	}
+	host, port, err := net.SplitHostPort(p2pAddr)
+	if err != nil {
+		return nil, fmt.Errorf("split p2p address %q: %w", p2pAddr, err)
+	}
+	protocol := "dns4"
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.To4() != nil {
+			protocol = "ip4"
+		} else {
+			protocol = "ip6"
+		}
+	}
+	return ma.NewMultiaddr(fmt.Sprintf("/%s/%s/tcp/%s/p2p/%s", protocol, host, port, peerID))
+}
