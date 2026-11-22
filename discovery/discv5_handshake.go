@@ -154,7 +154,7 @@ func (s *Discv5Conn) sendHandshakeMessage(w *WhoAreYou, record []byte) ([12]byte
 	pkt = append(pkt, iv[:]...)
 	pkt = append(pkt, headerMasked...)
 	pkt = append(pkt, ct...)
-	_, err = s.fd.WriteToUDP(pkt, s.peerAddr)
+	err = writeUDP(s.fd, "discv5", "handshake", pkt, s.peerAddr)
 	if err != nil {
 		return nonce, nil, err
 	}

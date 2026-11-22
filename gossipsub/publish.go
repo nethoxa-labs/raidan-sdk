@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -90,7 +91,12 @@ func (p *Publisher) join(topicName string) (*joinedTopic, error) {
 
 // Publish publishes one message while retaining the peer connection, router,
 // and topic membership for subsequent protocol actions.
-func (p *Publisher) Publish(topicName string, data []byte, opts Options) error {
+func (p *Publisher) Publish(topicName string, data []byte, opts Options) (err error) {
+	defer func() {
+		if err != nil {
+			session.EmitError("gossipsub", "", "publish "+topicName, err)
+		}
+	}()
 	if p == nil {
 		return errors.New("nil gossipsub publisher")
 	}
@@ -121,6 +127,13 @@ func (p *Publisher) Publish(topicName string, data []byte, opts Options) error {
 	session.ObserveWrite(publishCtx, session.Write{Protocol: "gossipsub", Topic: topicName, Payload: data})
 	if err := joined.topic.Publish(publishCtx, data); err != nil {
 		return fmt.Errorf("publish %q: %w", topicName, err)
+	}
+	if session.EventsEnabled() {
+		peers := make([]string, 0, 1)
+		for _, id := range joined.topic.ListPeers() {
+			peers = append(peers, id.String())
+		}
+		session.Emit(session.Event{Event: session.EventSent, Protocol: "gossipsub", Peer: strings.Join(peers, ","), Kind: topicName, Size: len(data)})
 	}
 	if opts.After <= 0 {
 		return nil

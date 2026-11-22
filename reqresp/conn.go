@@ -2,10 +2,12 @@ package reqresp
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -14,6 +16,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
@@ -40,6 +43,8 @@ type Session struct {
 	pubsub *pubsub.PubSub
 	peerID peer.ID
 	addrs  []ma.Multiaddr
+	// closing marks a local Close, which is not a peer disconnect.
+	closing *atomic.Bool
 }
 
 // NewSession connects a transient libp2p host using the configured local identity.
@@ -107,12 +112,51 @@ func NewSessionWithIdentity(ctx context.Context, beaconURL, p2pAddr string, iden
 		return nil, fmt.Errorf("new gossipsub router: %w", err)
 	}
 	h.Peerstore().AddAddrs(info.ID, info.Addrs, peerstore.TempAddrTTL)
+	closing := &atomic.Bool{}
+	if session.EventsEnabled() {
+		watchPeer(h, info.ID, closing)
+	}
 	if err := h.Connect(dialCtx, *info); err != nil {
+		session.EmitError("libp2p", info.ID.String(), "connect "+addr.String(), err)
 		stop()
 		_ = h.Close()
 		return nil, fmt.Errorf("connect consensus peer: %w", err)
 	}
-	return &Session{ctx: ctx, stop: stop, host: h, pubsub: ps, peerID: info.ID, addrs: explicitAddrs}, nil
+	if session.EventsEnabled() {
+		session.Emit(session.Event{Event: session.EventConnected, Protocol: "libp2p", Peer: info.ID.String(), Addr: addr.String()})
+	}
+	return &Session{ctx: ctx, stop: stop, host: h, pubsub: ps, peerID: info.ID, addrs: explicitAddrs, closing: closing}, nil
+}
+
+// watchPeer records the end of the connection to the peer and the Goodbye
+// message it sends first, which names the reason. libp2p reports a closed
+// connection without a reason, so the Goodbye is the only reason there is.
+func watchPeer(h host.Host, id peer.ID, closing *atomic.Bool) {
+	h.SetStreamHandler(GoodbyeV1, func(stream network.Stream) {
+		defer func() { _ = stream.Close() }()
+		_ = stream.SetDeadline(time.Now().Add(consensusDialTimeout))
+		payload, err := ReadSSZSnappy(stream, 8)
+		if err != nil || len(payload) != 8 {
+			session.EmitError("reqresp", id.String(), "read goodbye", err)
+			return
+		}
+		code := binary.LittleEndian.Uint64(payload)
+		reason := fmt.Sprintf("goodbye %d", code)
+		switch code {
+		case 1:
+			reason = "goodbye 1 (client shutdown)"
+		case 2:
+			reason = "goodbye 2 (irrelevant network)"
+		case 3:
+			reason = "goodbye 3 (fault or error)"
+		}
+		session.Emit(session.Event{Event: session.EventDisconnected, Protocol: "reqresp", Peer: id.String(), ReasonCode: session.Reason(code), Reason: reason})
+	})
+	h.Network().Notify(&network.NotifyBundle{DisconnectedF: func(_ network.Network, conn network.Conn) {
+		if conn.RemotePeer() == id && !closing.Load() {
+			session.Emit(session.Event{Event: session.EventDisconnected, Protocol: "libp2p", Peer: id.String(), Reason: "connection closed by the peer"})
+		}
+	}})
 }
 
 // Close stops the gossipsub router and releases the libp2p host and all of its
@@ -121,6 +165,7 @@ func (s *Session) Close() error {
 	if s == nil || s.host == nil {
 		return nil
 	}
+	s.closing.Store(true)
 	s.stop()
 	return s.host.Close()
 }

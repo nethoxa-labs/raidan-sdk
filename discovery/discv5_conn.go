@@ -59,6 +59,7 @@ func DialDiscv5WithKey(ctx context.Context, target string, priv *ecdsa.PrivateKe
 		return nil, err
 	}
 	session.Step(ctx, "Opening discv5 session to %s", peer)
+	emitUDPConnected("discv5", node.ID().String(), peer)
 	return &Discv5Conn{
 		ctx:        ctx,
 		fd:         fd,
@@ -109,7 +110,7 @@ func (s *Discv5Conn) PrivateKey() *ecdsa.PrivateKey { return s.ourPriv }
 // ReadRaw reads one UDP datagram without interpreting its framing.
 func (s *Discv5Conn) ReadRaw(timeout time.Duration) ([]byte, *net.UDPAddr, error) {
 	buffer := make([]byte, discv4MaxPacketSize)
-	n, from, err := readUDPWithContext(s.ctx, s.fd, buffer, timeout)
+	n, from, err := readUDPWithContext(s.ctx, "discv5", s.fd, buffer, timeout)
 	if err != nil {
 		return nil, nil, err
 	}

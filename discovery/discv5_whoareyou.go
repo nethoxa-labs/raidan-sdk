@@ -33,7 +33,7 @@ func (s *Discv5Conn) readWhoAreYou(timeout time.Duration, expectedNonce *[12]byt
 		if remaining <= 0 {
 			return nil, errors.New("timeout")
 		}
-		n, from, err := readUDPWithContext(s.ctx, s.fd, buf, remaining)
+		n, from, err := readUDPWithContext(s.ctx, "discv5", s.fd, buf, remaining)
 		if err != nil {
 			return nil, err
 		}

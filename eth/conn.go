@@ -189,6 +189,7 @@ func DialPreStatusWithKey(ctx context.Context, target, rpcURL string, config Con
 	if err != nil {
 		return closeOnError(fmt.Errorf("compute SNAP capability offset: %w", err))
 	}
+	rlpxConn.SetEventKinds(eventKinds(ethOffset, snapOffset))
 	if err := fd.SetDeadline(time.Time{}); err != nil {
 		return closeOnError(fmt.Errorf("clear handshake deadline: %w", err))
 	}
@@ -661,6 +662,7 @@ func rawDial(ctx context.Context, node *enode.Node, cp *ethrpc.ChainParams, key 
 		_ = fd.Close()
 		return nil, forkid.ID{}, fmt.Errorf("compute SNAP capability offset: %w", err)
 	}
+	rc.SetEventKinds(eventKinds(ethOffset, snapOffset))
 
 	// ── ETH Status ──────────────────────────────────────────────────────
 
@@ -721,6 +723,10 @@ readStatus:
 		return nil, peerFID, fmt.Errorf("write status: %w", err)
 	}
 
+	if session.EventsEnabled() {
+		session.Emit(session.Event{Event: session.EventConnected, Protocol: "eth", Peer: node.ID().String(), Addr: net.JoinHostPort(node.IP().String(), fmt.Sprint(node.TCP())), Kind: capabilityList(negotiated)})
+	}
+
 	return &Conn{
 		ctx:        ctx,
 		rlpxConn:   rc,
@@ -733,4 +739,21 @@ readStatus:
 		dead:       make(chan struct{}),
 		msgs:       make(chan connMsg, 256),
 	}, peerFID, nil
+}
+
+// eventKinds names wire codes for delivery events: a message of the eth or snap
+// capability is reported with its protocol and its code relative to the
+// capability offset (the ETH_ and snap code constants), anything else with the
+// bare wire code.
+func eventKinds(ethOffset, snapOffset uint64) func(uint64) (string, string) {
+	const snapCodes = 10
+	return func(code uint64) (string, string) {
+		switch {
+		case snapOffset != 0 && code >= snapOffset && code < snapOffset+snapCodes:
+			return "snap", fmt.Sprintf("0x%02x", code-snapOffset)
+		case code >= ethOffset && (snapOffset == 0 || code < snapOffset):
+			return "eth", fmt.Sprintf("0x%02x", code-ethOffset)
+		}
+		return "devp2p", fmt.Sprintf("0x%02x", code)
+	}
 }

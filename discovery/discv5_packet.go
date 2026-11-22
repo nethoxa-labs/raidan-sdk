@@ -76,8 +76,7 @@ func (s *Discv5Conn) SendRandomOrdinary() ([12]byte, error) {
 	pkt = append(pkt, masked...)
 	pkt = append(pkt, msg...)
 
-	_, err := s.fd.WriteToUDP(pkt, s.peerAddr)
-	return nonce, err
+	return nonce, writeUDP(s.fd, "discv5", "random-ordinary", pkt, s.peerAddr)
 }
 
 func checkedUint16Length(label string, length int) (uint16, error) {
@@ -97,6 +96,5 @@ func checkedByteLength(label string, length int) (byte, error) {
 // SendRaw sends an already encoded discv5 packet to the peer.
 func (s *Discv5Conn) SendRaw(pkt []byte) error {
 	session.ObserveWrite(s.ctx, session.Write{Protocol: "discv5", Payload: pkt, Raw: true})
-	_, err := s.fd.WriteToUDP(pkt, s.peerAddr)
-	return err
+	return writeUDP(s.fd, "discv5", "raw", pkt, s.peerAddr)
 }

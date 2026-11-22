@@ -105,8 +105,7 @@ func (s *Discv5Conn) sendOrdinaryPlainWithKey(sess *Discv5Session, key, plain []
 	packet = append(packet, iv[:]...)
 	packet = append(packet, headerMasked...)
 	packet = append(packet, ciphertext...)
-	_, err = s.fd.WriteToUDP(packet, s.peerAddr)
-	return err
+	return writeUDP(s.fd, "discv5", "ordinary", packet, s.peerAddr)
 }
 
 // ReadOrdinary reads and decrypts the next valid ordinary packet.
@@ -125,7 +124,7 @@ func (s *Discv5Conn) ReadOrdinary(sess *Discv5Session, timeout time.Duration) (*
 			}
 			return nil, errors.New("timeout")
 		}
-		n, from, err := readUDPWithContext(s.ctx, s.fd, buf, remain)
+		n, from, err := readUDPWithContext(s.ctx, "discv5", s.fd, buf, remain)
 		if err != nil {
 			return nil, err
 		}

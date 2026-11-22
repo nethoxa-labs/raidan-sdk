@@ -55,7 +55,12 @@ func OpenRPCStream(ctx context.Context, h host.Host, peerID peer.ID) (network.St
 
 // SendRPC writes one caller-encoded protobuf RPC over a negotiated gossipsub
 // stream. The supplied bytes exclude the unsigned-varint stream prefix.
-func SendRPC(ctx context.Context, h host.Host, peerID peer.ID, rpc []byte) error {
+func SendRPC(ctx context.Context, h host.Host, peerID peer.ID, rpc []byte) (err error) {
+	defer func() {
+		if err != nil {
+			session.EmitError("gossipsub", peerID.String(), "send rpc", err)
+		}
+	}()
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -92,6 +97,9 @@ func SendRPC(ctx context.Context, h host.Host, peerID peer.ID, rpc []byte) error
 	if err := stream.CloseWrite(); err != nil {
 		_ = stream.Reset()
 		return fmt.Errorf("close gossipsub write side: %w", err)
+	}
+	if session.EventsEnabled() {
+		session.Emit(session.Event{Event: session.EventSent, Protocol: "gossipsub", Peer: peerID.String(), Kind: string(stream.Protocol()), Size: len(rpc)})
 	}
 	return nil
 }

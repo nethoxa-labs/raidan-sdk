@@ -59,7 +59,12 @@ func (s *Session) RequestChunks(proto string, payload []byte, options RequestOpt
 	return s.request(proto, payload, options, true)
 }
 
-func (s *Session) request(proto string, payload []byte, options RequestOptions, all bool) ([]*ResponseChunk, error) {
+func (s *Session) request(proto string, payload []byte, options RequestOptions, all bool) (chunks []*ResponseChunk, err error) {
+	defer func() {
+		if err != nil && session.EventsEnabled() {
+			session.Emit(session.Event{Event: session.EventError, Protocol: "reqresp", Peer: s.peerID.String(), Kind: proto, Op: "request", Error: err.Error()})
+		}
+	}()
 	if options.Timeout == 0 {
 		options.Timeout = 8 * time.Second
 	}
@@ -123,6 +128,9 @@ func (s *Session) request(proto string, payload []byte, options RequestOptions, 
 		_ = stream.Reset()
 		return nil, fmt.Errorf("close write side: %w", err)
 	}
+	if session.EventsEnabled() {
+		session.Emit(session.Event{Event: session.EventSent, Protocol: "reqresp", Peer: s.peerID.String(), Kind: proto, Size: len(capturedBody)})
+	}
 	if options.SkipResponse {
 		return nil, nil
 	}
@@ -139,7 +147,10 @@ func (s *Session) request(proto string, payload []byte, options RequestOptions, 
 		_ = stream.Reset()
 		return nil, err
 	}
-	chunks := []*ResponseChunk{first}
+	if session.EventsEnabled() {
+		session.Emit(session.Event{Event: session.EventReply, Protocol: "reqresp", Peer: s.peerID.String(), Kind: proto, Size: len(first.Payload), Status: responseStatus(first.Code)})
+	}
+	chunks = []*ResponseChunk{first}
 	if !all || first.Code != CodeSuccess {
 		return chunks, nil
 	}
@@ -253,4 +264,19 @@ func RequestChunks(ctx context.Context, beaconURL, p2pAddr, proto string, payloa
 		}
 	}
 	return nil, lastErr
+}
+
+// responseStatus names a response code of a delivery event.
+func responseStatus(code byte) string {
+	switch code {
+	case CodeSuccess:
+		return "success"
+	case 1:
+		return "invalid_request"
+	case 2:
+		return "server_error"
+	case 3:
+		return "resource_unavailable"
+	}
+	return fmt.Sprintf("0x%02x", code)
 }

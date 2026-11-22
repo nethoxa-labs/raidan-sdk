@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -37,6 +38,35 @@ type Conn struct {
 
 	mu     sync.Mutex
 	snappy bool
+
+	// peer and addr identify the remote end in delivery events. kinds names a
+	// wire code for them; the layer that negotiates capabilities sets it
+	// before the connection is used concurrently.
+	peer  string
+	addr  string
+	kinds func(code uint64) (protocol, kind string)
+}
+
+// SetEventKinds names wire codes in delivery events: it maps a wire code to
+// the protocol and the protocol-relative message kind. Call it before the
+// connection is read or written concurrently.
+func (c *Conn) SetEventKinds(kinds func(code uint64) (protocol, kind string)) { c.kinds = kinds }
+
+func (c *Conn) eventKind(code uint64) (string, string) {
+	switch code {
+	case HelloMsg:
+		return "devp2p", "hello"
+	case DiscMsg:
+		return "devp2p", "disconnect"
+	case PingMsg:
+		return "devp2p", "ping"
+	case PongMsg:
+		return "devp2p", "pong"
+	}
+	if c.kinds != nil {
+		return c.kinds(code)
+	}
+	return "devp2p", fmt.Sprintf("0x%02x", code)
 }
 
 type frameWriter struct {
@@ -78,8 +108,10 @@ func dial(ctx context.Context, target string, key *ecdsa.PrivateKey) (*Conn, net
 	addr := net.JoinHostPort(node.IP().String(), fmt.Sprintf("%d", node.TCP()))
 	dialCtx, cancel := context.WithTimeout(ctx, session.Remaining(ctx, 5*time.Second))
 	defer cancel()
+	peerID := node.ID().String()
 	fd, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", addr)
 	if err != nil {
+		session.EmitError("rlpx", peerID, "dial "+addr, err)
 		return nil, nil, fmt.Errorf("dial: %w", err)
 	}
 	if err := fd.SetDeadline(time.Now().Add(session.Remaining(ctx, 10*time.Second))); err != nil {
@@ -88,6 +120,7 @@ func dial(ctx context.Context, target string, key *ecdsa.PrivateKey) (*Conn, net
 	}
 	secrets, err := initiatorHandshake(fd, key, node.Pubkey())
 	if err != nil {
+		session.EmitError("rlpx", peerID, "handshake "+addr, err)
 		_ = fd.Close()
 		return nil, nil, fmt.Errorf("rlpx handshake: %w", err)
 	}
@@ -95,6 +128,10 @@ func dial(ctx context.Context, target string, key *ecdsa.PrivateKey) (*Conn, net
 	if err != nil {
 		_ = fd.Close()
 		return nil, nil, err
+	}
+	rc.peer, rc.addr = peerID, addr
+	if session.EventsEnabled() {
+		session.Emit(session.Event{Event: session.EventConnected, Protocol: "rlpx", Peer: peerID, Addr: addr})
 	}
 	return rc, fd, nil
 }
@@ -186,7 +223,39 @@ func newConn(network net.Conn, secrets rlpx.Secrets) (*Conn, error) {
 	}, nil
 }
 
-func (c *Conn) Read() (uint64, []byte, int, error) { return c.reader.Read() }
+// Read returns the next frame. With delivery events enabled it records the
+// peer's replies, its Disconnect message with the reason, and a closed
+// connection.
+func (c *Conn) Read() (uint64, []byte, int, error) {
+	code, data, size, err := c.reader.Read()
+	if session.EventsEnabled() {
+		c.readEvent(code, data, size, err)
+	}
+	return code, data, size, err
+}
+
+func (c *Conn) readEvent(code uint64, data []byte, size int, err error) {
+	if err != nil {
+		switch {
+		case isTimeoutError(err):
+		case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, net.ErrClosed), errors.Is(err, syscall.ECONNRESET):
+			session.Emit(session.Event{Event: session.EventDisconnected, Protocol: "rlpx", Peer: c.peer, Addr: c.addr, Reason: "connection closed: " + err.Error()})
+		default:
+			session.EmitError("rlpx", c.peer, "read", err)
+		}
+		return
+	}
+	protocol, kind := c.eventKind(code)
+	switch code {
+	case PingMsg, PongMsg:
+		return
+	case DiscMsg:
+		reason, text := DecodeDisconnectReason(data)
+		session.Emit(session.Event{Event: session.EventDisconnected, Protocol: "rlpx", Peer: c.peer, Addr: c.addr, ReasonCode: session.Reason(reason), Reason: text})
+		return
+	}
+	session.Emit(session.Event{Event: session.EventReply, Protocol: protocol, Peer: c.peer, Addr: c.addr, Kind: kind, Size: size})
+}
 
 func (c *Conn) Write(code uint64, payload []byte) (uint32, error) {
 	if c == nil {
@@ -204,7 +273,12 @@ func (c *Conn) Write(code uint64, payload []byte) (uint32, error) {
 	plain := rlp.AppendUint64(nil, code)
 	plain = append(plain, data...)
 	if err := c.writer.write(c.net, []byte{0xc2, 0x80, 0x80}, plain); err != nil {
+		session.EmitError("rlpx", c.peer, "write", err)
 		return 0, err
+	}
+	if session.EventsEnabled() && code != PongMsg && code != PingMsg {
+		protocol, kind := c.eventKind(code)
+		session.Emit(session.Event{Event: session.EventSent, Protocol: protocol, Peer: c.peer, Addr: c.addr, Kind: kind, Size: len(payload)})
 	}
 	return uint32(len(data)), nil
 }

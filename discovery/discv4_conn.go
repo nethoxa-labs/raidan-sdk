@@ -112,6 +112,7 @@ func DialDiscv4WithKey(ctx context.Context, target string, key *ecdsa.PrivateKey
 		return nil, err
 	}
 	u := &Discv4Conn{ctx: ctx, fd: fd, key: key, peer: peer}
+	emitUDPConnected("discv4", node.ID().String(), peer)
 	session.Step(ctx, "Opening discv4 socket to %s", peer)
 	return u, nil
 }
@@ -136,14 +137,13 @@ func (u *Discv4Conn) LocalAddr() *net.UDPAddr {
 // SendRaw writes bytes directly to the peer's UDP port without discv4 framing.
 func (u *Discv4Conn) SendRaw(data []byte) error {
 	session.ObserveWrite(u.ctx, session.Write{Protocol: "raw", Payload: data, Raw: true})
-	_, err := u.fd.WriteToUDP(data, u.peer)
-	return err
+	return writeUDP(u.fd, "discv4", "raw", data, u.peer)
 }
 
 // ReadRaw reads one UDP datagram without interpreting its framing.
 func (u *Discv4Conn) ReadRaw(timeout time.Duration) ([]byte, *net.UDPAddr, error) {
 	buffer := make([]byte, discv4MaxPacketSize)
-	n, from, err := readUDPWithContext(u.ctx, u.fd, buffer, timeout)
+	n, from, err := readUDPWithContext(u.ctx, "discv4", u.fd, buffer, timeout)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -170,7 +170,7 @@ func (u *Discv4Conn) sendDiscv4Packet(ptype byte, data any) ([]byte, error) {
 		return nil, err
 	}
 	session.ObserveWrite(u.ctx, session.Write{Protocol: "discv4", Code: uint64(ptype), Payload: encoded})
-	_, err = u.fd.WriteToUDP(packet, u.peer)
+	err = writeUDP(u.fd, "discv4", fmt.Sprintf("0x%02x", ptype), packet, u.peer)
 	if err != nil {
 		return nil, err
 	}
